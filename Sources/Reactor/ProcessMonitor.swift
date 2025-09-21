@@ -1,6 +1,55 @@
 import Foundation
+import AppKit
 
 class ProcessMonitor {
+    
+    /// Gets the icon for a process
+    func getProcessIcon(for process: ProcessInfo) -> NSImage? {
+        if process.isApplication {
+            // Try to get the actual app icon
+            if let appIcon = getApplicationIcon(from: process.fullPath) {
+                return appIcon
+            }
+        }
+        
+        // Fallback to system icons based on process type
+        return getSystemIcon(for: process.processType)
+    }
+    
+    /// Gets the application icon from the bundle path
+    private func getApplicationIcon(from path: String) -> NSImage? {
+        // Extract .app bundle path
+        if let appRange = path.range(of: ".app") {
+            let appPath = String(path[...appRange.upperBound])
+            let appBundlePath = appPath.replacingOccurrences(of: ".app/", with: ".app")
+            
+            // Try to get icon from the app bundle
+            if FileManager.default.fileExists(atPath: appBundlePath) {
+                return NSWorkspace.shared.icon(forFile: appBundlePath)
+            }
+            
+            // Try to find the app in Applications folder
+            let appName = URL(fileURLWithPath: appBundlePath).lastPathComponent
+            let applicationsPath = "/Applications/\(appName)"
+            if FileManager.default.fileExists(atPath: applicationsPath) {
+                return NSWorkspace.shared.icon(forFile: applicationsPath)
+            }
+        }
+        
+        return nil
+    }
+    
+    /// Gets system icon for process type
+    private func getSystemIcon(for type: ProcessType) -> NSImage? {
+        switch type {
+        case .application:
+            return NSImage(systemSymbolName: "app.fill", accessibilityDescription: "Application")
+        case .system:
+            return NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: "System")
+        case .daemon:
+            return NSImage(systemSymbolName: "wrench.fill", accessibilityDescription: "Daemon")
+        }
+    }
     
     /// Prints the top CPU and memory consuming processes
     func printTopProcesses() {
@@ -117,9 +166,9 @@ class ProcessMonitor {
                                let cpu = Double(components[1]),
                                let memory = Double(components[2]) {
                                 
-                                let command = components.dropFirst(3).joined(separator: " ")
-                                let cleanCommand = extractProcessName(from: command)
-                                processes.append(ProcessInfo(pid: pid, cpu: cpu, memory: memory, command: cleanCommand))
+                                let fullCommand = components.dropFirst(3).joined(separator: " ")
+                                let cleanCommand = extractProcessName(from: fullCommand)
+                                processes.append(ProcessInfo(pid: pid, cpu: cpu, memory: memory, command: cleanCommand, fullPath: fullCommand))
                                 ReactorLogger.logAndPrint("Added process: PID=\(pid), CPU=\(cpu)%, MEM=\(memory)%, CMD=\(cleanCommand)", type: .debug, category: ReactorLogger.process, categoryName: "Process")
                             } else {
                                 ReactorLogger.logAndPrint("Failed to parse line: '\(trimmedLine)' - components: \(components)", type: .debug, category: ReactorLogger.process, categoryName: "Process")
@@ -316,9 +365,54 @@ struct ProcessInfo {
     let cpu: Double
     let memory: Double
     let command: String
+    let fullPath: String
+    let isApplication: Bool
+    
+    init(pid: Int, cpu: Double, memory: Double, command: String, fullPath: String = "") {
+        self.pid = pid
+        self.cpu = cpu
+        self.memory = memory
+        self.command = command
+        self.fullPath = fullPath.isEmpty ? command : fullPath
+        self.isApplication = fullPath.contains(".app/") || fullPath.hasSuffix(".app")
+    }
     
     var formattedDescription: String {
         return String(format: "PID: %d, CPU: %.1f%%, Memory: %.1f%%, Command: %@", pid, cpu, memory, command)
+    }
+    
+    var displayName: String {
+        if isApplication {
+            // Extract app name from .app bundle
+            if let appName = fullPath.components(separatedBy: "/").first(where: { $0.hasSuffix(".app") }) {
+                return appName.replacingOccurrences(of: ".app", with: "")
+            }
+        }
+        return command
+    }
+    
+    var processType: ProcessType {
+        if isApplication {
+            return .application
+        } else if command.hasPrefix("/System/") || command.hasPrefix("/usr/") {
+            return .system
+        } else {
+            return .daemon
+        }
+    }
+}
+
+enum ProcessType {
+    case application
+    case system  
+    case daemon
+    
+    var icon: String {
+        switch self {
+        case .application: return "📱"
+        case .system: return "⚙️"
+        case .daemon: return "🔧"
+        }
     }
 }
 

@@ -68,28 +68,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         
-        // Start with a loading placeholder
-        let loadingItem = NSMenuItem(title: "Loading processes...", action: nil, keyEquivalent: "")
+        // Add header with system info
+        addSystemInfoHeader(to: menu)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Start with a loading placeholder for processes
+        let loadingItem = NSMenuItem(title: "🔄 Loading processes...", action: nil, keyEquivalent: "")
         loadingItem.isEnabled = false
+        loadingItem.tag = 999 // Mark for removal
         menu.addItem(loadingItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let refreshItem = NSMenuItem(title: "🔄 Refresh Processes", action: #selector(refreshProcesses), keyEquivalent: "r")
-        refreshItem.target = self
-        menu.addItem(refreshItem)
+        // Control section
+        addControlSection(to: menu)
         
         menu.addItem(NSMenuItem.separator())
         
-        let aboutItem = NSMenuItem(title: "About Reactor", action: #selector(showAbout), keyEquivalent: "")
-        aboutItem.target = self
-        menu.addItem(aboutItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        let quitItem = NSMenuItem(title: "Quit Reactor", action: #selector(quitApp), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
+        // Info section
+        addInfoSection(to: menu)
         
         // CRITICAL: Assign the menu to the status item FIRST
         statusItem?.menu = menu
@@ -106,6 +104,77 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.updateProcessMenuItems(in: menu, with: topProcesses)
             }
         }
+    }
+    
+    /// Adds system information header to the menu
+    private func addSystemInfoHeader(to menu: NSMenu) {
+        let headerItem = NSMenuItem()
+        headerItem.isEnabled = false
+        
+        // Get basic system info
+        let processCount = Foundation.ProcessInfo.processInfo.processorCount
+        let systemVersion = Foundation.ProcessInfo.processInfo.operatingSystemVersionString
+        
+        let headerText = "⚙️ Reactor - System Monitor\n💻 \(processCount) cores • \(systemVersion)"
+        let headerAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 12),
+            .foregroundColor: NSColor.labelColor
+        ]
+        
+        headerItem.attributedTitle = NSAttributedString(string: headerText, attributes: headerAttributes)
+        menu.addItem(headerItem)
+    }
+    
+    /// Adds control section to the menu
+    private func addControlSection(to menu: NSMenu) {
+        let refreshItem = NSMenuItem(title: "🔄 Refresh Processes", action: #selector(refreshProcesses), keyEquivalent: "r")
+        refreshItem.target = self
+        menu.addItem(refreshItem)
+        
+        let killAllItem = NSMenuItem(title: "⚠️ Force Quit All High CPU", action: #selector(killHighCPUProcesses), keyEquivalent: "")
+        killAllItem.target = self
+        menu.addItem(killAllItem)
+    }
+    
+    /// Force kills all high CPU processes (>50%)
+    @objc func killHighCPUProcesses() {
+        ReactorLogger.logAndPrint("🚨 User requested to kill all high CPU processes", type: .info, category: ReactorLogger.ui, categoryName: "UI")
+        
+        let alert = NSAlert()
+        alert.messageText = "Force Quit High CPU Processes?"
+        alert.informativeText = "This will terminate all processes using more than 50% CPU. This action cannot be undone and may cause data loss."
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "Force Quit All")
+        alert.addButton(withTitle: "Cancel")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let processes = processMonitor.getProcessList()
+            let highCPUProcesses = processes.filter { $0.cpu > 50.0 }
+            
+            ReactorLogger.logAndPrint("Found \(highCPUProcesses.count) high CPU processes to terminate", type: .info, category: ReactorLogger.process, categoryName: "Process")
+            
+            for process in highCPUProcesses {
+                let success = processMonitor.killProcess(pid: process.pid)
+                ReactorLogger.logProcessTermination(pid: process.pid, processName: process.command, success: success)
+            }
+            
+            // Refresh the menu after killing processes
+            refreshProcesses()
+        }
+    }
+    
+    /// Adds info section to the menu
+    private func addInfoSection(to menu: NSMenu) {
+        let aboutItem = NSMenuItem(title: "ℹ️ About Reactor", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        let quitItem = NSMenuItem(title: "❌ Quit Reactor", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
     }
     
     // Updated process menu management - this method now updates existing menu items
@@ -127,31 +196,94 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Add new process items at the top
         var insertIndex = 0
         for (index, process) in processes.enumerated() {
-            let processTitle = String(format: "%d. %@ (%.1f%% CPU, %.1f%% MEM)", 
-                                    index + 1, 
-                                    process.command, 
-                                    process.cpu, 
-                                    process.memory)
-            
-            let processItem = NSMenuItem(title: processTitle, action: #selector(processSelected(_:)), keyEquivalent: "")
-            processItem.target = self
-            processItem.tag = 999 // Mark as process item (we'll use representedObject for PID)
-            processItem.representedObject = process.pid
-            processItem.toolTip = "PID: \(process.pid) - Click to kill this process"
-            
-            // Add visual indicators for high usage
-            if process.cpu > 50.0 {
-                processItem.title = "🔥 " + processTitle
-            } else if process.cpu > 20.0 {
-                processItem.title = "⚡ " + processTitle
-            }
-            
+            let processItem = createEnhancedProcessMenuItem(for: process, rank: index + 1)
             menu.insertItem(processItem, at: insertIndex)
             insertIndex += 1
         }
         
         ReactorLogger.logAndPrint("✅ Updated menu with \(processes.count) process items", type: .info, category: ReactorLogger.ui, categoryName: "UI")
     }
+    
+    /// Creates an enhanced menu item with icon and detailed two-line layout
+    private func createEnhancedProcessMenuItem(for process: ProcessInfo, rank: Int) -> NSMenuItem {
+        // Create the menu item
+        let processItem = NSMenuItem()
+        processItem.target = self
+        processItem.action = #selector(processSelected(_:))
+        processItem.tag = 999 // Mark as process item
+        processItem.representedObject = process.pid
+        
+        // Create attributed title with two-line layout
+        let attributedTitle = createTwoLineProcessTitle(for: process, rank: rank)
+        processItem.attributedTitle = attributedTitle
+        
+        // Set icon if available
+        if let icon = processMonitor.getProcessIcon(for: process) {
+            // Resize icon to appropriate size for menu
+            let iconSize = NSSize(width: 16, height: 16)
+            icon.size = iconSize
+            processItem.image = icon
+        }
+        
+        // Create detailed tooltip
+        let tooltip = createDetailedTooltip(for: process)
+        processItem.toolTip = tooltip
+        
+        return processItem
+    }
+    
+    /// Creates a two-line attributed title for the process
+    private func createTwoLineProcessTitle(for process: ProcessInfo, rank: Int) -> NSAttributedString {
+        let title = NSMutableAttributedString()
+        
+        // First line: Process name with rank and type icon
+        let processTypeIcon = process.processType.icon
+        let firstLine = String(format: "%@ %d. %@", processTypeIcon, rank, process.displayName)
+        let firstLineAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 13),
+            .foregroundColor: NSColor.labelColor
+        ]
+        title.append(NSAttributedString(string: firstLine, attributes: firstLineAttributes))
+        
+        // Add performance indicators
+        if process.cpu > 50.0 {
+            title.append(NSAttributedString(string: " 🔥", attributes: firstLineAttributes))
+        } else if process.cpu > 20.0 {
+            title.append(NSAttributedString(string: " ⚡", attributes: firstLineAttributes))
+        }
+        
+        // Second line: Detailed stats
+        let secondLine = String(format: "\nPID: %d • CPU: %.1f%% • Memory: %.1f%% • Type: %@", 
+                               process.pid, 
+                               process.cpu, 
+                               process.memory,
+                               process.processType == .application ? "App" : 
+                               process.processType == .system ? "System" : "Daemon")
+        let secondLineAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        title.append(NSAttributedString(string: secondLine, attributes: secondLineAttributes))
+        
+        return title
+    }
+    
+    /// Creates a detailed tooltip for the process
+    private func createDetailedTooltip(for process: ProcessInfo) -> String {
+        var tooltip = "Process Details:\n"
+        tooltip += "Name: \(process.displayName)\n"
+        tooltip += "PID: \(process.pid)\n" 
+        tooltip += "CPU Usage: \(String(format: "%.1f", process.cpu))%\n"
+        tooltip += "Memory Usage: \(String(format: "%.1f", process.memory))%\n"
+        tooltip += "Type: \(process.processType == .application ? "Application" : process.processType == .system ? "System Process" : "Daemon")\n"
+        if !process.fullPath.isEmpty && process.fullPath != process.command {
+            tooltip += "Full Path: \(process.fullPath)\n"
+        }
+        tooltip += "\nClick to terminate this process"
+        return tooltip
+    }
+    
+    // MARK: - Action Methods
     
     @objc func processSelected(_ sender: NSMenuItem) {
         // Try to get PID from representedObject first, then fall back to tag
@@ -227,6 +359,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ReactorLogger.logAndPrint("👋 User requested app quit", type: .info, category: ReactorLogger.app, categoryName: "App")
         NSApplication.shared.terminate(nil)
     }
+    
+    // MARK: - NSApplicationDelegate
     
     func applicationWillTerminate(_ notification: Notification) {
         ReactorLogger.logAndPrint("🛑 Reactor is shutting down...", type: .info, category: ReactorLogger.app, categoryName: "App")
