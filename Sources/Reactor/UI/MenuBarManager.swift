@@ -12,6 +12,7 @@ class MenuBarManager: NSObject, NSMenuDelegate {
     private var processCountItemRef: NSMenuItem?
     private var liveUpdateTimer: DispatchSourceTimer?
     private var menuOpen: Bool = false
+    private var mainWindowController: MainWindowController?
     
     // MARK: - Setup
     
@@ -226,6 +227,10 @@ class MenuBarManager: NSObject, NSMenuDelegate {
     }
     
     private func addControlSection(to menu: NSMenu) {
+        let openWindow = NSMenuItem(title: "🖥️ Open Task Manager…", action: #selector(openMainWindow), keyEquivalent: "")
+        openWindow.target = self
+        menu.addItem(openWindow)
+
         let refreshItem = NSMenuItem(title: "🔄 Refresh Processes", action: #selector(refreshProcesses), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
@@ -352,6 +357,15 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         ReactorLogger.logAndPrint("👋 User requested app quit", 
                                  type: .info, category: ReactorLogger.app, categoryName: "App")
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func openMainWindow() {
+        if mainWindowController == nil {
+            mainWindowController = MainWindowController()
+        }
+        guard let wc = mainWindowController else { return }
+        wc.showWindow(self)
+        NSApp.activate(ignoringOtherApps: true)
     }
     
     // MARK: - NSMenuDelegate
