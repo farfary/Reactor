@@ -49,73 +49,95 @@ class ProcessScanningService {
     // MARK: - Private Implementation
     
     private func scanProcesses() -> [ProcessInfo] {
-        ReactorLogger.logAndPrint("🔍 Getting process list using shell...", type: .debug, category: ReactorLogger.process, categoryName: "Process")
-        
-        var processes: [ProcessInfo] = []
-        
-        // Use a more reliable approach with proper error handling
+        // 1) Take a ps snapshot (all PIDs with cpu/mem/comm)
+        let psMap = getPsSnapshot()
+
+        // 2) Build from NSWorkspace running applications first (to ensure user apps are included)
+        let fromWorkspace = buildProcessesFromNSWorkspace(psMap: psMap)
+        let wsPids = Set(fromWorkspace.map { $0.pid })
+
+        // 3) Add remaining ps processes that were not represented by NSWorkspace (daemons, services, etc.)
+        let fromPs = buildProcessesFromPs(psMap: psMap, excludePids: wsPids)
+
+        let all = (fromWorkspace + fromPs)
+        ReactorLogger.logAndPrint("✅ Aggregated processes: \(all.count) (workspace: \(fromWorkspace.count), ps-only: \(fromPs.count))", type: .info, category: ReactorLogger.process, categoryName: "Process")
+        return all
+    }
+
+    private struct PsRow { let cpu: Double; let mem: Double; let comm: String }
+
+    private func getPsSnapshot() -> [Int: PsRow] {
+        ReactorLogger.logAndPrint("🔍 Taking ps snapshot (pid, cpu, mem, comm)", type: .debug, category: ReactorLogger.system, categoryName: "System")
+
         let task = Process()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
-        
         task.standardOutput = outputPipe
         task.standardError = errorPipe
-        task.arguments = ["-c", "ps -axo pid,pcpu,pmem,comm | head -100"]
+        task.arguments = ["-c", "ps -axo pid,pcpu,pmem,comm"]
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        
+
+        var map: [Int: PsRow] = [:]
         do {
             try task.run()
-            
-            // Set a timeout to prevent hanging
             let group = DispatchGroup()
             group.enter()
-            
             var outputData = Data()
-            var errorData = Data()
-            
             DispatchQueue.global().async {
                 outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                 group.leave()
             }
-            
-            // Wait with timeout
             let result = group.wait(timeout: .now() + 5.0)
-            
             if result == .timedOut {
                 task.terminate()
-                ReactorLogger.logAndPrint("⚠️ Process scanning timed out, using basic process list", 
-                                  type: .default, category: ReactorLogger.process, categoryName: "Process")
-                return getBasicProcessList()
+                ReactorLogger.logAndPrint("⚠️ ps snapshot timed out", type: .default, category: ReactorLogger.process, categoryName: "Process")
+                return map
             }
-            
             task.waitUntilExit()
-            
-            if task.terminationStatus == 0 {
-                if let output = String(data: outputData, encoding: .utf8) {
-                    ReactorLogger.logAndPrint("✅ Got shell output: \(output.count) chars", 
-                                      type: .info, category: ReactorLogger.process, categoryName: "Process")
-                    processes = parseProcessOutput(output)
-                } else {
-                    ReactorLogger.logAndPrint("⚠️ Failed to decode shell output", 
-                                      type: .default, category: ReactorLogger.process, categoryName: "Process")
-                    return getBasicProcessList()
-                }
-            } else {
-                if let errorOutput = String(data: errorData, encoding: .utf8) {
-                    ReactorLogger.logAndPrint("❌ Shell command failed: \(errorOutput)", 
-                                      type: .error, category: ReactorLogger.process, categoryName: "Process")
-                }
-                return getBasicProcessList()
+            guard task.terminationStatus == 0, let output = String(data: outputData, encoding: .utf8) else {
+                ReactorLogger.logAndPrint("⚠️ ps snapshot returned non-zero status", type: .default, category: ReactorLogger.system, categoryName: "System")
+                return map
             }
-            
+            let lines = output.components(separatedBy: .newlines)
+            for (idx, line) in lines.enumerated() {
+                if idx == 0 || line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+                let comps = line.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+                guard comps.count >= 4, let pid = Int(comps[0]), let cpu = Double(comps[1]), let mem = Double(comps[2]) else { continue }
+                let comm = comps[3]
+                map[pid] = PsRow(cpu: cpu, mem: mem, comm: comm)
+            }
+            ReactorLogger.logAndPrint("✅ ps snapshot PIDs: \(map.count)", type: .debug, category: ReactorLogger.system, categoryName: "System")
         } catch {
-            ReactorLogger.logAndPrint("❌ Failed to execute ps command: \(error)", 
-                              type: .error, category: ReactorLogger.process, categoryName: "Process")
-            return getBasicProcessList()
+            ReactorLogger.logAndPrint("❌ ps snapshot failed: \(error)", type: .error, category: ReactorLogger.system, categoryName: "System")
         }
-        
-        return processes.isEmpty ? getBasicProcessList() : processes
+        return map
+    }
+
+    private func buildProcessesFromNSWorkspace(psMap: [Int: PsRow]) -> [ProcessInfo] {
+        var results: [ProcessInfo] = []
+        let runningApps = NSWorkspace.shared.runningApplications
+        ReactorLogger.logAndPrint("🔍 NSWorkspace running apps: \(runningApps.count)", type: .debug, category: ReactorLogger.process, categoryName: "Process")
+        for app in runningApps {
+            let pid = Int(app.processIdentifier)
+            let ps = psMap[pid]
+            let cpu = ps?.cpu ?? 0.0
+            let mem = ps?.mem ?? 0.0
+            let name = app.localizedName ?? app.bundleIdentifier ?? (ps?.comm ?? "Unknown")
+            let fullPath = ProcessIntrospection.shared.executablePath(for: pid) ?? app.executableURL?.path ?? app.bundleURL?.path ?? name
+            let p = ProcessInfo(pid: pid, cpuUsage: cpu, memoryUsage: mem, command: name, fullPath: fullPath)
+            results.append(p)
+        }
+        return results
+    }
+
+    private func buildProcessesFromPs(psMap: [Int: PsRow], excludePids: Set<Int>) -> [ProcessInfo] {
+        var results: [ProcessInfo] = []
+        for (pid, row) in psMap where !excludePids.contains(pid) {
+            let fullPath = ProcessIntrospection.shared.executablePath(for: pid) ?? row.comm
+            let p = ProcessInfo(pid: pid, cpuUsage: row.cpu, memoryUsage: row.mem, command: row.comm, fullPath: fullPath)
+            results.append(p)
+        }
+        return results
     }
     
     private func getBasicProcessList() -> [ProcessInfo] {
