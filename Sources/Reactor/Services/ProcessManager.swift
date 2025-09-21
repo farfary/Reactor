@@ -88,7 +88,7 @@ class ProcessManager {
                                  type: .info, category: ReactorLogger.process, categoryName: "Process")
         
         let task = Process()
-        task.launchPath = "/bin/kill"
+        task.executableURL = URL(fileURLWithPath: "/bin/kill")
         task.arguments = ["-TERM", String(pid)]
         
         do {
@@ -125,7 +125,7 @@ class ProcessManager {
                                  type: .fault, category: ReactorLogger.process, categoryName: "Process")
         
         let task = Process()
-        task.launchPath = "/bin/kill"
+        task.executableURL = URL(fileURLWithPath: "/bin/kill")
         task.arguments = ["-KILL", String(pid)]
         
         do {
