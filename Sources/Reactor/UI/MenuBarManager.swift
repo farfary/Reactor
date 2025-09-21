@@ -264,6 +264,19 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         alert.messageText = "Process: \(process.displayName)"
         alert.informativeText = process.detailedDescription + "\nWhat would you like to do?"
         alert.alertStyle = .informational
+
+        // Provide a proper icon for the dialog. By default NSAlert uses the app icon,
+        // but this project doesn't ship a bundled app icon via SwiftPM, which can
+        // result in a generic folder glyph. Prefer the actual process icon.
+        if let icon = processManager.getIcon(for: process) {
+            icon.isTemplate = false
+            icon.size = NSSize(width: 64, height: 64)
+            alert.icon = icon
+        } else if let appIcon = NSApplication.shared.applicationIconImage.copy() as? NSImage {
+            appIcon.isTemplate = false
+            appIcon.size = NSSize(width: 64, height: 64)
+            alert.icon = appIcon
+        }
         
         alert.addButton(withTitle: "Terminate (SIGTERM)")
         alert.addButton(withTitle: "Force Kill (SIGKILL)")
