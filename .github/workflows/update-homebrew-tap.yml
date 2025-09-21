@@ -1,0 +1,247 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update (e.g., v1.0.0)'
+        required: true
+      force_update:
+        description: 'Force update even if version exists'
+        type: boolean
+        default: false
+
+env:
+  HOMEBREW_TAP_REPO: farfary/homebrew-reactor
+
+jobs:
+  update-homebrew-tap:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Get release information
+      id: release_info
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          FORCE_UPDATE="${{ github.event.inputs.force_update }}"
+        else
+          VERSION="${{ github.event.release.tag_name }}"
+          FORCE_UPDATE="false"
+        fi
+        
+        VERSION_NUMBER="${VERSION#v}"
+        
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "VERSION_NUMBER=${VERSION_NUMBER}" >> $GITHUB_OUTPUT
+        echo "FORCE_UPDATE=${FORCE_UPDATE}" >> $GITHUB_OUTPUT
+        
+        echo "Processing version: ${VERSION}"
+        
+    - name: Download release asset
+      id: download
+      run: |
+        echo "📥 Downloading release asset..."
+        
+        TARBALL_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.release_info.outputs.VERSION }}/reactor-${{ steps.release_info.outputs.VERSION_NUMBER }}-universal.tar.gz"
+        
+        echo "Downloading from: ${TARBALL_URL}"
+        
+        # Download and verify the tarball exists
+        if curl -f -L -o reactor.tar.gz "${TARBALL_URL}"; then
+          echo "✅ Successfully downloaded release tarball"
+          
+          # Calculate SHA256
+          SHA256=$(sha256sum reactor.tar.gz | cut -d' ' -f1)
+          echo "SHA256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "SHA256: ${SHA256}"
+        else
+          echo "❌ Failed to download release tarball"
+          echo "URL: ${TARBALL_URL}"
+          exit 1
+        fi
+        
+    - name: Clone Homebrew tap repository
+      run: |
+        echo "📂 Cloning Homebrew tap repository..."
+        
+        git clone https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.HOMEBREW_TAP_REPO }}.git homebrew-tap
+        cd homebrew-tap
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        echo "✅ Tap repository cloned"
+        
+    - name: Update Homebrew formula
+      run: |
+        echo "🍺 Updating Homebrew formula..."
+        
+        cd homebrew-tap
+        mkdir -p Formula
+        
+        # Check if formula already exists for this version
+        if [ -f "Formula/reactor.rb" ] && [ "${{ steps.release_info.outputs.FORCE_UPDATE }}" != "true" ]; then
+          CURRENT_VERSION=$(grep 'version "' Formula/reactor.rb | sed 's/.*version "\(.*\)".*/\1/' || echo "unknown")
+          if [ "${CURRENT_VERSION}" = "${{ steps.release_info.outputs.VERSION_NUMBER }}" ]; then
+            echo "⚠️ Formula already exists for version ${{ steps.release_info.outputs.VERSION_NUMBER }}"
+            echo "Use force_update=true to override"
+            exit 0
+          fi
+        fi
+        
+        # Generate new formula
+        cat > Formula/reactor.rb << EOF
+        class Reactor < Formula
+          desc "Sophisticated macOS menubar application for real-time system process monitoring"
+          homepage "https://github.com/${{ github.repository }}"
+          url "https://github.com/${{ github.repository }}/releases/download/${{ steps.release_info.outputs.VERSION }}/reactor-${{ steps.release_info.outputs.VERSION_NUMBER }}-universal.tar.gz"
+          sha256 "${{ steps.download.outputs.SHA256 }}"
+          version "${{ steps.release_info.outputs.VERSION_NUMBER }}"
+          license "MIT"
+          
+          depends_on :macos => :monterey
+          depends_on arch: :intel
+          depends_on arch: :arm64
+          
+          def install
+            bin.install "reactor"
+          end
+          
+          def caveats
+            <<~EOS
+              Reactor has been installed as a command-line tool.
+              
+              To start Reactor:
+                reactor
+              
+              The app will appear in your macOS menubar as ⚡
+              
+              Features:
+              • Real-time process monitoring with intelligent categorization
+              • Interactive process management with safety confirmations
+              • Comprehensive logging and performance metrics
+              • Native macOS menubar integration
+              
+              For more information:
+                https://github.com/${{ github.repository }}
+              
+              System Requirements:
+              • macOS 12.0+ (Monterey or later)
+              • No additional dependencies required
+            EOS
+          end
+          
+          test do
+            # Test that the binary exists and is executable
+            assert_predicate bin/"reactor", :exist?
+            assert_predicate bin/"reactor", :executable?
+            
+            # Test basic functionality (when --version is implemented)
+            # system "#{bin}/reactor", "--version"
+          end
+        end
+        EOF
+        
+        echo "✅ Formula updated"
+        
+    - name: Create README for tap
+      run: |
+        echo "📝 Creating/updating tap README..."
+        
+        cd homebrew-tap
+        
+        cat > README.md << 'EOF'
+        # Homebrew Tap for Reactor
+        
+        This is the official Homebrew tap for [Reactor](https://github.com/${{ github.repository }}), a sophisticated macOS menubar application for real-time system process monitoring.
+        
+        ## Installation
+        
+        ```bash
+        # Add the tap
+        brew tap ${{ env.HOMEBREW_TAP_REPO }}
+        
+        # Install Reactor
+        brew install reactor
+        
+        # Run Reactor
+        reactor
+        ```
+        
+        ## About Reactor
+        
+        Reactor is a native macOS application that provides:
+        
+        - **🔍 Real-time Process Monitoring**: Live display of system processes with CPU and memory usage
+        - **⚡ Smart Process Classification**: Automatic categorization of applications, system services, and developer tools
+        - **🎯 Interactive Management**: Click-to-terminate processes with intelligent confirmation dialogs
+        - **🔄 Dynamic Updates**: Process list refreshes automatically when menubar is accessed
+        - **📊 Performance Metrics**: Detailed CPU and memory usage with formatted display
+        - **🛡️ Safe Termination**: Graceful process handling with proper signal management
+        
+        ## System Requirements
+        
+        - macOS 12.0+ (Monterey or later)
+        - Intel or Apple Silicon Mac
+        - No additional dependencies
+        
+        ## Usage
+        
+        After installation, run `reactor` from your terminal. The application will appear as a ⚡ icon in your macOS menubar.
+        
+        ## Support
+        
+        - **Documentation**: [GitHub Repository](https://github.com/${{ github.repository }})
+        - **Issues**: [Report Bugs](https://github.com/${{ github.repository }}/issues)
+        - **Discussions**: [Feature Requests](https://github.com/${{ github.repository }}/discussions)
+        
+        ## License
+        
+        MIT License - see the [main repository](https://github.com/${{ github.repository }}) for details.
+        EOF
+        
+        echo "✅ README created"
+        
+    - name: Commit and push changes
+      run: |
+        echo "🚀 Committing and pushing changes..."
+        
+        cd homebrew-tap
+        
+        # Add all changes
+        git add .
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "ℹ️ No changes to commit"
+        else
+          # Commit changes
+          git commit -m "Update reactor to ${{ steps.release_info.outputs.VERSION }}
+
+        - Updated formula for reactor ${{ steps.release_info.outputs.VERSION_NUMBER }}
+        - SHA256: ${{ steps.download.outputs.SHA256 }}
+        - Auto-updated by GitHub Actions"
+          
+          # Push changes
+          git push origin main
+          
+          echo "✅ Changes pushed to Homebrew tap"
+          echo ""
+          echo "🎉 Homebrew tap update completed!"
+          echo ""
+          echo "📋 Summary:"
+          echo "- Version: ${{ steps.release_info.outputs.VERSION }}"
+          echo "- SHA256: ${{ steps.download.outputs.SHA256 }}"
+          echo "- Tap Repository: ${{ env.HOMEBREW_TAP_REPO }}"
+          echo ""
+          echo "🍺 Users can now install with:"
+          echo "  brew tap ${{ env.HOMEBREW_TAP_REPO }}"
+          echo "  brew install reactor"
+          echo ""
+          echo "📖 Or using the one-liner:"
+          echo "  brew install ${{ env.HOMEBREW_TAP_REPO }}/reactor"
+        fi

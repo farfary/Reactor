@@ -1,0 +1,146 @@
+name: Release Reactor (DMG + Cask)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  PRODUCT_NAME: Reactor
+
+jobs:
+  build-and-release:
+    permissions:
+      contents: write
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v3
+        with:
+          path: |
+            .build
+            ~/.cache/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Compute version vars
+        id: compute-version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          # Normalize: ensure it starts with 'v'
+          case "$VERSION" in
+            v*) ;;
+            *) VERSION="v${VERSION}" ;;
+          esac
+          VERSION_NUMBER="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "VERSION_NUMBER=${VERSION_NUMBER}" >> $GITHUB_ENV
+          echo "Building version: ${VERSION} (${VERSION_NUMBER})"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_number=${VERSION_NUMBER}" >> $GITHUB_OUTPUT
+
+      - name: Build bundle via Makefile
+        run: |
+          echo "🔨 Building Reactor (release) and packaging app bundle..."
+          make bundle
+          ls -la release
+
+      - name: Create DMG from App bundle
+        shell: bash
+        run: |
+          echo "🍎 Creating macOS DMG..."
+          APP_NAME="${PRODUCT_NAME}.app"
+          DMG_PATH="release/${PRODUCT_NAME}-${VERSION_NUMBER}.dmg"
+          hdiutil create -volname "${PRODUCT_NAME}" -srcfolder "release/${APP_NAME}" -ov -format UDZO "${DMG_PATH}"
+          DMG_SHA256=$(shasum -a 256 "${DMG_PATH}" | cut -d' ' -f1)
+          echo "DMG_SHA256=${DMG_SHA256}" >> $GITHUB_ENV
+          echo "DMG_PATH=${DMG_PATH}" >> $GITHUB_ENV
+          echo "✅ DMG created: ${DMG_PATH}"
+          ls -la release/
+          # Stable name for the cask (points to releases/latest/download/Reactor.dmg)
+          cp "${DMG_PATH}" "release/${PRODUCT_NAME}.dmg"
+
+      - name: Create release notes
+        shell: bash
+        run: |
+          echo "📝 Creating release notes..."
+          NOTES=release/RELEASE_NOTES.md
+          echo "# Reactor ${VERSION}" > "$NOTES"
+          echo >> "$NOTES"
+          echo "A sophisticated macOS menubar application for real-time system process monitoring and management." >> "$NOTES"
+          echo >> "$NOTES"
+          echo "## 🚀 Installation Options" >> "$NOTES"
+          echo >> "$NOTES"
+          echo "### Homebrew Cask (from this repo)" >> "$NOTES"
+          echo '```bash' >> "$NOTES"
+          echo "brew install --cask https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/Casks/reactor.rb" >> "$NOTES"
+          echo '```' >> "$NOTES"
+          echo >> "$NOTES"
+          echo "### Manual Installation (DMG)" >> "$NOTES"
+          echo "Download the .dmg from the Assets below, open it, and drag Reactor.app to your Applications folder." >> "$NOTES"
+          echo >> "$NOTES"
+          echo "## 📋 What's Included" >> "$NOTES"
+          echo "- App Bundle: macOS application bundle (Reactor.app)" >> "$NOTES"
+          echo "- Homebrew Cask: Install via Homebrew using the cask file in this repo" >> "$NOTES"
+          echo >> "$NOTES"
+          echo "## 🔧 System Requirements" >> "$NOTES"
+          echo "- macOS 12.0+ (Monterey or later)" >> "$NOTES"
+          echo "- Intel or Apple Silicon Mac" >> "$NOTES"
+          echo "- No additional dependencies required" >> "$NOTES"
+          echo >> "$NOTES"
+          echo "## 📊 File Information" >> "$NOTES"
+          echo "- SHA256 (DMG): ${DMG_SHA256}" >> "$NOTES"
+          echo >> "$NOTES"
+          echo "## 🐛 Troubleshooting" >> "$NOTES"
+          echo "1. Gatekeeper Warning: Right-click Reactor.app -> Open (first run) or run: xattr -dr com.apple.quarantine /Applications/Reactor.app" >> "$NOTES"
+          echo "2. Missing Icon in Menubar: Quit and relaunch the app" >> "$NOTES"
+          echo "3. Cask Install Fails: Wait a minute after release so the asset is available, or install directly from the DMG" >> "$NOTES"
+          echo >> "$NOTES"
+          echo "For more help, see the README or open an issue." >> "$NOTES"
+          echo "✅ Release notes created"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.compute-version.outputs.version }}
+          name: Reactor ${{ steps.compute-version.outputs.version }}
+          body_path: release/RELEASE_NOTES.md
+          files: |
+            release/*.dmg
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Release
+        shell: bash
+        run: |
+          echo "🔍 Verifying release artifacts..."
+          cd release
+          echo "Files created:"
+          ls -la
+          echo "\n✅ Release verification complete"
+          echo "\n🎉 Release ${VERSION} is ready!"
+          echo "Users can now install with: brew install --cask https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/Casks/reactor.rb"

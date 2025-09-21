@@ -32,27 +32,48 @@ A sophisticated macOS menubar application for real-time system process monitorin
 - **Swift 5.8+** and Xcode Command Line Tools
 - **Terminal** or **VS Code** (no Xcode required)
 
-### Quick Start
+### Homebrew Installation (Recommended)
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/farfary/Reactor.git
-   cd Reactor
-   ```
+```bash
+# Add the official tap
+brew tap farfary/reactor
 
-2. **Build with Swift Package Manager**
-   ```bash
-   swift build --configuration release
-   ```
+# Install Reactor
+brew install reactor
 
-3. **Run the Application**
-   ```bash
-   swift run
-   ```
+# Run the application
+reactor
+```
+
+### Manual Installation
+
+#### Quick Start
+```bash
+# Clone the repository
+git clone https://github.com/farfary/Reactor.git
+cd Reactor
+
+# Build and run
+swift build --configuration release
+swift run
+```
+
+#### Using Pre-built Binaries
+```bash
+# Download latest release
+curl -L -o reactor.tar.gz "https://github.com/farfary/Reactor/releases/latest/download/reactor-universal.tar.gz"
+
+# Extract and install
+tar -xzf reactor.tar.gz
+sudo mv reactor /usr/local/bin/
+
+# Run Reactor
+reactor
+```
 
 ### Alternative Installation Methods
 
-#### Using Make (Recommended for Production)
+#### Using Make (Development)
 ```bash
 # Build optimized release version
 make build
@@ -78,10 +99,15 @@ swift run --configuration debug
 xcode-select --install
 ```
 
+**Gatekeeper Issues (manual installation):**
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/reactor
+```
+
 **Permission Issues:**
 ```bash
 # For system process monitoring (optional)
-sudo swift run
+sudo reactor
 ```
 
 ## Usage

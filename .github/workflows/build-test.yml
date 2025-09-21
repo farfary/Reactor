@@ -1,0 +1,218 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PRODUCT_NAME: Reactor
+
+jobs:
+  build-test:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        configuration: [debug, release]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Cache Swift Package Manager
+      uses: actions/cache@v3
+      with:
+        path: |
+          .build
+          ~/.cache/org.swift.swiftpm
+        key: ${{ runner.os }}-spm-${{ matrix.configuration }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-${{ matrix.configuration }}-
+          ${{ runner.os }}-spm-
+          
+    - name: Resolve dependencies
+      run: |
+        echo "📦 Resolving Swift Package Manager dependencies..."
+        swift package resolve
+        
+    - name: Build project
+      run: |
+        echo "🔨 Building ${{ env.PRODUCT_NAME }} in ${{ matrix.configuration }} mode..."
+        swift build --configuration ${{ matrix.configuration }}
+        
+    - name: Run tests
+      run: |
+        echo "🧪 Running tests..."
+        # Add this when tests are implemented
+        # swift test --configuration ${{ matrix.configuration }}
+        echo "Tests will be added in future versions"
+        
+    - name: Verify binary
+      run: |
+        echo "🔍 Verifying built binary..."
+        BINARY_PATH=".build/${{ matrix.configuration }}/${{ env.PRODUCT_NAME }}"
+        
+        if [ -f "$BINARY_PATH" ]; then
+          echo "✅ Binary exists at: $BINARY_PATH"
+          file "$BINARY_PATH"
+          
+          # Check dependencies
+          echo -e "\n📋 Binary dependencies:"
+          otool -L "$BINARY_PATH" || true
+          
+          # Check size
+          echo -e "\n📊 Binary size:"
+          ls -lh "$BINARY_PATH"
+        else
+          echo "❌ Binary not found at: $BINARY_PATH"
+          echo "Available files:"
+          find .build -name "${{ env.PRODUCT_NAME }}" -type f || true
+          exit 1
+        fi
+        
+    - name: Test Make build system
+      if: matrix.configuration == 'release'
+      run: |
+        echo "🔨 Testing Makefile build system..."
+        make clean
+        make build
+        
+        # Verify make-built binary
+        if [ -f "reactor" ]; then
+          echo "✅ Makefile build successful"
+          file reactor
+          ls -lh reactor
+        else
+          echo "❌ Makefile build failed"
+          exit 1
+        fi
+        
+    - name: Upload build artifacts
+      if: matrix.configuration == 'release'
+      uses: actions/upload-artifact@v3
+      with:
+        name: reactor-${{ github.sha }}
+        path: |
+          .build/release/Reactor
+          reactor
+        retention-days: 7
+        
+  lint-and-format:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Check Swift format
+      run: |
+        echo "🎨 Checking Swift code formatting..."
+        
+        # Install swift-format if available
+        if command -v swift-format >/dev/null 2>&1; then
+          echo "Running swift-format..."
+          swift-format --recursive Sources/ --mode diff
+        else
+          echo "swift-format not available, skipping format check"
+        fi
+        
+    - name: Lint Swift code
+      run: |
+        echo "🔍 Linting Swift code..."
+        
+        # Basic Swift compilation check
+        swift build --configuration debug > /dev/null
+        
+        echo "✅ Swift compilation successful"
+        
+    - name: Check file structure
+      run: |
+        echo "📁 Verifying project structure..."
+        
+        # Required files
+        required_files=(
+          "Package.swift"
+          "README.md"
+          "Makefile"
+          "Sources/Reactor/main.swift"
+          "Sources/Reactor/ReactorLogger.swift"
+        )
+        
+        missing_files=()
+        for file in "${required_files[@]}"; do
+          if [ ! -f "$file" ]; then
+            missing_files+=("$file")
+          fi
+        done
+        
+        if [ ${#missing_files[@]} -eq 0 ]; then
+          echo "✅ All required files present"
+        else
+          echo "❌ Missing required files:"
+          printf '%s\n' "${missing_files[@]}"
+          exit 1
+        fi
+        
+        # Required directories
+        required_dirs=(
+          "Sources/Reactor/App"
+          "Sources/Reactor/Models"
+          "Sources/Reactor/Services"
+          "Sources/Reactor/UI"
+        )
+        
+        missing_dirs=()
+        for dir in "${required_dirs[@]}"; do
+          if [ ! -d "$dir" ]; then
+            missing_dirs+=("$dir")
+          fi
+        done
+        
+        if [ ${#missing_dirs[@]} -eq 0 ]; then
+          echo "✅ All required directories present"
+        else
+          echo "❌ Missing required directories:"
+          printf '%s\n' "${missing_dirs[@]}"
+          exit 1
+        fi
+        
+    - name: Verify documentation
+      run: |
+        echo "📚 Verifying documentation..."
+        
+        # Check README.md exists and has content
+        if [ -f "README.md" ] && [ -s "README.md" ]; then
+          echo "✅ README.md exists and has content"
+          
+          # Check for required sections
+          required_sections=("Installation" "Usage" "Architecture" "Development")
+          missing_sections=()
+          
+          for section in "${required_sections[@]}"; do
+            if ! grep -q "## $section" README.md; then
+              missing_sections+=("$section")
+            fi
+          done
+          
+          if [ ${#missing_sections[@]} -eq 0 ]; then
+            echo "✅ All required README sections present"
+          else
+            echo "⚠️ Missing README sections:"
+            printf '%s\n' "${missing_sections[@]}"
+          fi
+        else
+          echo "❌ README.md missing or empty"
+          exit 1
+        fi
