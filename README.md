@@ -1,241 +1,674 @@
-# Reactor 🔥
+# Reactor ⚡
 
-A lightweight macOS menubar application for monitoring and managing system processes. Built with Swift, AppKit, and designed to run entirely from VS Code without requiring Xcode.
+A sophisticated macOS menubar application for real-time system process monitoring and management. Built with modern Swift, featuring a clean modular architecture and comprehensive logging system.
 
-![Reactor Icon](https://via.placeholder.com/64x64/007ACC/FFFFFF?text=⚡)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Platform](https://img.shields.io/badge/platform-macOS%2012.0+-red.svg)
+![Swift](https://img.shields.io/badge/Swift-5.8+-orange.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ## Features
 
-- **🔍 Live Process Menu**: View top CPU and memory consuming processes directly in the menubar dropdown
-- **⚡ Interactive Process Management**: Click on any process to terminate it with confirmation dialog
-- **🔄 Auto-Refresh**: Process list updates automatically when you open the menubar menu
-- **🎯 Lightweight**: Minimal resource usage, stays in your menubar
-- **🌙 System Integration**: Supports macOS dark mode and system preferences
-- **📊 Visual Indicators**: High CPU processes are marked with 🔥 and moderate usage with ⚡
-- **�️ Safe Termination**: Uses SIGTERM first, then SIGKILL if needed for graceful process handling
+- **🔍 Live Process Monitoring**: Real-time display of system processes with CPU and memory usage
+- **⚡ Smart Process Classification**: Automatic categorization of applications, system services, and developer tools
+- **🎯 Interactive Management**: Click-to-terminate processes with intelligent confirmation dialogs
+- **🔄 Dynamic Updates**: Process list refreshes automatically when menubar is accessed
+- **� Visual Process Types**: Color-coded icons and indicators for different process categories
+- **📊 Performance Metrics**: Detailed CPU and memory usage with formatted display
+- **🛡️ Safe Termination**: Graceful process handling with proper signal management
+- **🌙 System Integration**: Native macOS menubar integration with dark mode support
+- **📝 Comprehensive Logging**: Detailed logging system with categorized output for debugging
+- **⚙️ Modular Architecture**: Clean separation of concerns with service-oriented design
 
 ## Screenshots
 
-> *Screenshots will be added here*
+> *Screenshots coming soon - showing the modern menubar interface with process categorization*
 
 ## Installation
 
 ### Prerequisites
 
-- macOS 12.0 or later
-- Swift 5.8 or later
-- VS Code (no Xcode required!)
+- **macOS 12.0+** (Monterey or later)
+- **Swift 5.8+** and Xcode Command Line Tools
+- **Terminal** or **VS Code** (no Xcode required)
 
-### Quick Setup
+### Quick Start
 
-1. **Clone or Download**
+1. **Clone the Repository**
    ```bash
-   cd ~/Desktop
-   git clone <your-repo-url> Reactor
-   # OR create the project directory manually
-   mkdir Reactor && cd Reactor
+   git clone https://github.com/farfary/Reactor.git
+   cd Reactor
    ```
 
-2. **Copy the Project Files**
-   - Copy all the files from this repository into your `~/Desktop/Reactor/` directory
-   - Ensure the directory structure matches:
-     ```
-     Reactor/
-     ├── Package.swift
-     ├── README.md
-     └── Sources/
-         └── Reactor/
-             ├── main.swift
-             └── ProcessMonitor.swift
-     ```
-
-3. **Build the Project**
+2. **Build with Swift Package Manager**
    ```bash
-   cd ~/Desktop/Reactor
-   swift build
+   swift build --configuration release
    ```
 
-4. **Run the Application**
+3. **Run the Application**
    ```bash
    swift run
    ```
 
-### Alternative: Development Mode
+### Alternative Installation Methods
 
-For development and testing:
-
+#### Using Make (Recommended for Production)
 ```bash
-# Build in debug mode
-swift build --configuration debug
+# Build optimized release version
+make build
 
-# Run with verbose output
+# Install to /usr/local/bin (requires sudo)
+make install
+
+# Run installed version
+reactor
+```
+
+#### Development Build
+```bash
+# Debug build with verbose logging
+swift build --configuration debug
 swift run --configuration debug
+```
+
+### Troubleshooting Installation
+
+**Missing Command Line Tools:**
+```bash
+xcode-select --install
+```
+
+**Permission Issues:**
+```bash
+# For system process monitoring (optional)
+sudo swift run
 ```
 
 ## Usage
 
-1. **Launch**: Run `swift run` from the project directory
-2. **Access**: Look for the ⚡ bolt icon in your macOS menubar
-3. **Monitor**: Click the icon to see the top 10 CPU-intensive processes listed directly in the dropdown menu
-4. **Manage**: Click on any process in the list to terminate it (with confirmation dialog)
-5. **Refresh**: The process list updates automatically each time you open the menu, or click "🔄 Refresh Processes"
+### Basic Operation
 
-### Menu Features
+1. **Launch**: Run `swift run` or `reactor` (if installed) from terminal
+2. **Access**: Look for the ⚡ icon in your macOS menubar (top-right area)
+3. **Monitor**: Click the icon to view categorized processes with real-time metrics
+4. **Manage**: Click any process to terminate it (with smart confirmation dialogs)
+5. **Refresh**: Process list updates automatically, or use "🔄 Refresh" for manual updates
 
-- **Live Process List**: Top 10 processes sorted by CPU usage appear directly in the menu
-- **Visual Indicators**: 
-  - 🔥 High CPU usage (>50%)
-  - ⚡ Moderate CPU usage (>20%)
-- **Process Actions**: Click any process to kill it (with safety confirmation)
-- **🔄 Refresh Processes**: Manually refresh the process list
-- **About Reactor**: Shows application information
-- **Quit Reactor**: Closes the application
+### Process Categories
 
-### Process Information Display
+Reactor intelligently categorizes processes with distinct visual indicators:
 
-Each process shows:
-- **Rank**: Position in CPU usage (1-10)
-- **Process Name**: Cleaned, readable process name
-- **CPU Usage**: Percentage of CPU being used
-- **Memory Usage**: Percentage of system memory being used
-- **PID**: Process ID (shown in tooltip)
+- **� Applications**: User applications and productivity tools
+- **⚙️ System Services**: Core macOS system processes
+- **🛠️ Developer Tools**: Xcode, VS Code, terminals, and development utilities
+- **☁️ Cloud Services**: Dropbox, OneDrive, backup services
+- **🔒 Security**: Antivirus, VPN, security applications
+- **🎮 Games**: Gaming applications and platforms
+- **🌐 Web Browsers**: Safari, Chrome, Firefox, and browser helpers
+- **💬 Communication**: Slack, Discord, messaging applications
+- **🎵 Media**: Music, video, and media processing applications
+
+### Advanced Features
+
+#### Process Information Display
+Each process entry shows:
+- **🏷️ Category Icon**: Visual process type indicator
+- **📊 CPU Usage**: Real-time CPU consumption percentage
+- **💾 Memory Usage**: Physical memory usage in MB/GB
+- **🆔 Process ID**: PID for system reference
+- **📝 Command Path**: Full executable path (in detailed view)
+
+#### Smart Termination
+- **Graceful Shutdown**: Attempts SIGTERM first for clean exits
+- **Force Termination**: Falls back to SIGKILL for unresponsive processes
+- **System Protection**: Warns before terminating critical system processes
+- **Confirmation Dialogs**: Smart prompts based on process importance
+
+## Architecture
+
+Reactor is built with a clean, modular architecture emphasizing separation of concerns and testability:
+
+```
+Sources/Reactor/
+├── App/
+│   └── AppDelegate.swift           # Application lifecycle management
+├── Extensions/
+│   └── String+Extensions.swift     # String utility extensions
+├── Models/
+│   ├── ProcessInfo.swift           # Process data model
+│   └── ProcessType.swift           # Process classification system
+├── Services/
+│   ├── ProcessClassifier.swift     # Intelligent process categorization
+│   ├── ProcessIconService.swift    # System icon resolution
+│   ├── ProcessManager.swift        # Central coordination service
+│   └── ProcessScanningService.swift # Process discovery & parsing
+├── UI/
+│   └── MenuBarManager.swift        # MenuBar interface management
+├── ReactorLogger.swift             # Centralized logging system
+└── main.swift                      # Application entry point
+```
+
+### Core Components
+
+#### **ProcessManager** - Central Coordinator
+- Orchestrates all process-related operations
+- Manages service dependencies through dependency injection
+- Provides caching and performance optimization
+- Handles service lifecycle and error recovery
+
+#### **ProcessScanningService** - System Integration
+- Interfaces with macOS process APIs (`ps` command, NSWorkspace)
+- Implements timeout handling and graceful fallbacks
+- Parses process data with robust error handling
+- Provides real-time process discovery
+
+#### **ProcessClassifier** - Intelligence Layer
+- Categorizes processes based on executable names and paths
+- Maintains comprehensive classification rules
+- Supports dynamic classification updates
+- Provides fallback classification strategies
+
+#### **ProcessIconService** - Visual Enhancement
+- Resolves system icons for applications and processes
+- Caches icon resources for performance
+- Provides fallback icons for unknown processes
+- Integrates with macOS icon system
+
+#### **ReactorLogger** - Observability
+- Centralized logging with categorized subsystems
+- Performance timing and metrics collection
+- Structured logging with emoji-based visual indicators
+- Debug and production logging modes
+
+#### **MenuBarManager** - User Interface
+- Native AppKit menubar integration
+- Dynamic menu construction and updates
+- Event handling and user interaction management
+- Responsive UI with real-time data updates
+
+### Design Principles
+
+- **Service-Oriented Architecture**: Clear separation between data, business logic, and presentation
+- **Dependency Injection**: Services are injected for better testability and modularity
+- **Graceful Degradation**: Multiple fallback strategies for system integration
+- **Performance-First**: Caching, timeouts, and optimized data structures
+- **Comprehensive Logging**: Detailed observability for debugging and monitoring
+- **Error Resilience**: Robust error handling with user-friendly fallbacks
 
 ## Development
 
-### Project Structure
+### Build System
 
+Reactor supports multiple build workflows for different development needs:
+
+#### Swift Package Manager (Development)
+```bash
+# Debug build with full logging
+swift build --configuration debug
+swift run --configuration debug
+
+# Release build for testing
+swift build --configuration release
+swift run --configuration release
 ```
-Reactor/
-├── Package.swift              # Swift Package Manager configuration
-├── README.md                  # This file
-└── Sources/
-    └── Reactor/
-        ├── main.swift         # App entry point and UI setup
-        └── ProcessMonitor.swift # Process monitoring and management logic
+
+#### Make (Production)
+```bash
+# Optimized production build
+make build
+
+# Install system-wide
+make install
+
+# Clean build artifacts
+make clean
+
+# Create app bundle
+make app
 ```
 
-### Key Components
+### Development Workflow
 
-#### `main.swift`
-- **AppDelegate**: Main application delegate handling menubar setup
-- **Menu Construction**: Creates and manages the menubar menu
-- **Event Handling**: Responds to user interactions
+#### Setting Up Development Environment
+1. **Clone and Setup**
+   ```bash
+   git clone https://github.com/farfary/Reactor.git
+   cd Reactor
+   ```
 
-#### `ProcessMonitor.swift`
-- **Process Listing**: Fetches and parses system process information
-- **Process Management**: Handles process termination (SIGTERM/SIGKILL)
-- **Memory Monitoring**: Retrieves system memory statistics
-- **Data Models**: Structures for process and memory information
+2. **VS Code Integration**
+   ```bash
+   # Open in VS Code
+   code .
+   
+   # Build and run from integrated terminal
+   swift build && swift run
+   ```
 
-### Building from VS Code
+3. **Enable Debug Logging**
+   - All services use `ReactorLogger` with categorized output
+   - Debug builds include verbose logging with emoji indicators
+   - Performance metrics are automatically collected
 
-1. **Open Terminal in VS Code**: `View → Terminal`
-2. **Navigate to Project**: `cd ~/Desktop/Reactor`
-3. **Build**: `swift build`
-4. **Run**: `swift run`
-5. **Debug**: Add print statements and rebuild
+#### Code Organization Guidelines
 
-### Adding Features
+##### Adding New Features
+1. **Create Service**: Add new functionality in `Services/` directory
+2. **Update Models**: Extend `ProcessInfo` or `ProcessType` as needed
+3. **Integrate in ProcessManager**: Wire up new services through dependency injection
+4. **Add Logging**: Use `ReactorLogger` with appropriate categories and emoji indicators
+5. **Update UI**: Modify `MenuBarManager` for user-facing changes
 
-To extend Reactor's functionality:
-
-1. **Add Menu Items**: Modify `constructMenu()` in `main.swift`
-2. **Extend ProcessMonitor**: Add new methods to `ProcessMonitor.swift`
-3. **Handle Actions**: Create corresponding `@objc` methods in `AppDelegate`
-
-Example: Adding a "Show Memory Usage" feature:
-
+##### Example: Adding Network Monitoring
 ```swift
-// In main.swift constructMenu()
-let memoryItem = NSMenuItem(title: "Show Memory Usage", action: #selector(showMemoryUsage), keyEquivalent: "m")
-memoryItem.target = self
-menu.addItem(memoryItem)
+// 1. Create Services/NetworkMonitor.swift
+class NetworkMonitor {
+    func getNetworkUsage() -> NetworkInfo {
+        ReactorLogger.logAndPrint("🌐 Scanning network usage...", 
+                                 type: .info, 
+                                 category: ReactorLogger.system,
+                                 categoryName: "Network")
+        // Implementation here
+    }
+}
 
-// Add the action method
-@objc func showMemoryUsage() {
-    if let memInfo = processMonitor.getSystemMemoryInfo() {
-        print("Memory Usage: \(String(format: "%.1f", memInfo.memoryUsagePercentage))%")
-        print("Used: \(String(format: "%.2f", memInfo.usedMemoryGB))GB / \(String(format: "%.2f", memInfo.totalMemoryGB))GB")
+// 2. Integrate in ProcessManager.swift
+class ProcessManager {
+    private let networkMonitor: NetworkMonitor
+    
+    init(networkMonitor: NetworkMonitor = NetworkMonitor()) {
+        self.networkMonitor = networkMonitor
+    }
+}
+
+// 3. Add to MenuBarManager.swift
+private func buildNetworkSection() -> [NSMenuItem] {
+    let networkInfo = processManager.getNetworkUsage()
+    // Build menu items
+}
+```
+
+### Testing and Debugging
+
+#### Logging Categories
+Reactor uses structured logging with these categories:
+
+- **`ReactorLogger.app`**: Application lifecycle events
+- **`ReactorLogger.ui`**: User interface and menu operations  
+- **`ReactorLogger.process`**: Process scanning and management
+- **`ReactorLogger.system`**: System API interactions
+- **`ReactorLogger.performance`**: Performance metrics and timing
+
+#### Debug Commands
+```bash
+# View all logs in Console.app (filter by "Reactor")
+log stream --predicate 'subsystem == "com.reactor.app"'
+
+# Performance profiling
+instruments -t "Time Profiler" $(swift build --show-bin-path)/Reactor
+
+# Memory debugging
+leaks --atExit -- $(swift build --show-bin-path)/Reactor
+```
+
+#### Common Development Tasks
+
+**Adding Process Categories:**
+```swift
+// In Models/ProcessType.swift
+enum ProcessType: String, CaseIterable {
+    case newCategory = "New Category"
+    
+    var systemIconName: String {
+        switch self {
+        case .newCategory: return "new.icon.name"
+        }
     }
 }
 ```
 
-## Technical Details
+**Extending Process Information:**
+```swift
+// In Models/ProcessInfo.swift
+struct ProcessInfo {
+    let newProperty: String
+    
+    var formattedNewProperty: String {
+        return "Formatted: \(newProperty)"
+    }
+}
+```
 
-### Dependencies
-- **AppKit**: For menubar integration and UI components
-- **Foundation**: For system process interaction and data handling
+**Adding Menu Actions:**
+```swift
+// In UI/MenuBarManager.swift
+private func addCustomMenuItem() -> NSMenuItem {
+    let item = NSMenuItem(title: "Custom Action", 
+                         action: #selector(handleCustomAction), 
+                         keyEquivalent: "")
+    item.target = self
+    return item
+}
 
-### System Commands Used
-- `ps -axo pid,pcpu,pmem,comm --sort=-pcpu`: Process listing
-- `kill -TERM <pid>`: Graceful process termination
-- `kill -9 <pid>`: Force process termination
-- `vm_stat`: Memory statistics
+@objc private func handleCustomAction() {
+    ReactorLogger.logAndPrint("🎯 Custom action triggered", 
+                             type: .info, 
+                             category: ReactorLogger.ui,
+                             categoryName: "Menu")
+}
+```
 
-### Performance
-- Minimal CPU usage when idle
-- Process queries on-demand only
-- No background polling or timers
+## Technical Implementation
+
+### System Integration
+
+#### Process Data Sources
+- **Primary**: macOS `ps` command via Swift `Process` API with timeout handling
+- **Fallback**: `NSWorkspace.shared` for application discovery
+- **System APIs**: Native macOS process and memory management APIs
+
+#### Performance Optimizations
+- **Intelligent Caching**: ProcessManager caches process data and icons
+- **Timeout Management**: 5-second timeout for process scanning operations
+- **Lazy Loading**: Menu items created on-demand during menu presentation
+- **Memory Efficiency**: Structured data with minimal memory footprint
+
+#### Error Handling Strategy
+- **Graceful Degradation**: Multiple fallback methods for data collection
+- **User-Friendly Errors**: Meaningful error messages with suggested actions
+- **System Protection**: Prevents termination of critical system processes
+- **Logging Integration**: All errors logged with context and recovery actions
+
+### Dependencies and APIs
+
+#### Core Technologies
+- **AppKit**: Native macOS menubar and UI integration
+- **Foundation**: System process interaction and data structures
+- **os.log**: Structured logging with categorized subsystems
+- **Swift Concurrency**: Modern async/await for responsive operations
+
+#### System Commands Utilized
+```bash
+# Process discovery and monitoring
+ps -axo pid,pcpu,pmem,comm --sort=-pcpu
+
+# Memory statistics
+vm_stat
+
+# Process termination
+kill -TERM <pid>  # Graceful termination
+kill -9 <pid>     # Force termination
+```
+
+#### Platform Requirements
+- **macOS 12.0+**: Required for modern Process API and structured logging
+- **Swift 5.8+**: Leverages modern Swift concurrency and type system
+- **No External Dependencies**: Pure Swift Package Manager with system frameworks only
+
+### Security and Permissions
+
+#### System Access
+- **Standard Permissions**: Uses standard UNIX process tools without special entitlements
+- **Read-Only Operations**: Process monitoring requires no special permissions
+- **Process Termination**: Uses standard kill signals available to user processes
+- **Privacy Compliance**: No data collection, network access, or file system writing
+
+#### Safety Features
+- **Process Classification**: Identifies and warns about system-critical processes
+- **Confirmation Dialogs**: Smart prompts based on process importance and type
+- **Signal Progression**: Attempts graceful termination before force-kill
+- **Error Recovery**: Handles permission denied scenarios gracefully
 
 ## Troubleshooting
 
-### Common Issues
+### Installation Issues
 
-**"Command not found: swift"**
-- Install Xcode Command Line Tools: `xcode-select --install`
-
-**"Permission denied" when killing processes**
-- Some system processes require admin privileges
-- Try running with `sudo swift run` (not recommended for regular use)
-
-**App doesn't appear in menubar**
-- Check terminal output for error messages
-- Ensure macOS version compatibility (12.0+)
-
-**Build errors**
-- Verify all files are in the correct directory structure
-- Check Swift version: `swift --version`
-
-### Debug Mode
-
-Run with debug output:
+#### Command Line Tools Missing
 ```bash
-swift run --configuration debug
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Verify installation
+swift --version
+xcode-select -p
 ```
+
+#### Build Failures
+```bash
+# Clean and rebuild
+make clean
+swift package clean
+swift build
+
+# Check Swift version compatibility
+swift --version  # Should be 5.8+
+
+# Verify package dependencies
+swift package resolve
+```
+
+#### Permission Issues
+```bash
+# For enhanced process access (optional)
+sudo swift run
+
+# For installation to system directories
+sudo make install
+```
+
+### Runtime Issues
+
+#### Menubar Icon Not Appearing
+1. **Check Terminal Output**: Look for error messages during startup
+2. **System Compatibility**: Ensure macOS 12.0+ compatibility
+3. **Process Conflicts**: Check if another menubar app is interfering
+4. **Debug Mode**: Run with `swift run --configuration debug` for verbose output
+
+#### Process Termination Failures
+- **System Processes**: Some require elevated privileges
+- **Protected Applications**: macOS protects certain applications
+- **Permissions**: Try running with `sudo` for system processes
+- **Alternative Methods**: Use Activity Monitor for stubborn processes
+
+#### Performance Issues
+```bash
+# Check resource usage
+top -pid $(pgrep Reactor)
+
+# View logging output
+log stream --predicate 'subsystem == "com.reactor.app"'
+
+# Profile performance
+instruments -t "Time Profiler" /path/to/Reactor
+```
+
+### Development Debugging
+
+#### Logging Categories
+Enable specific logging categories for targeted debugging:
+
+```swift
+// In ReactorLogger.swift - adjust log levels
+public static let app = OSLog(subsystem: "com.reactor.app", category: "App")
+public static let process = OSLog(subsystem: "com.reactor.app", category: "Process")
+public static let performance = OSLog(subsystem: "com.reactor.app", category: "Performance")
+```
+
+#### Common Debug Commands
+```bash
+# View real-time logs
+log stream --predicate 'subsystem == "com.reactor.app"' --level debug
+
+# Check memory usage
+leaks --atExit -- $(swift build --show-bin-path)/Reactor
+
+# Profile CPU usage
+sample Reactor 10 -file reactor-profile.txt
+```
+
+#### Build System Debugging
+```bash
+# Verbose build output
+swift build --verbose
+
+# Check package dependencies
+swift package show-dependencies
+
+# Resolve dependency conflicts
+swift package resolve --force-resolved-versions
+```
+
+### Getting Help
+
+For additional support:
+
+1. **Check Logs**: Review Console.app logs filtered by "Reactor"
+2. **GitHub Issues**: Report bugs with system info and logs
+3. **Debug Mode**: Run with `--configuration debug` for detailed output
+4. **System Information**: Include macOS version, Swift version, and hardware specs
 
 ## Roadmap
 
-### Planned Features
-- [ ] 🎨 Enhanced UI with SwiftUI views
-- [ ] 📈 Real-time CPU/memory graphs
-- [ ] 🔔 Notifications for high resource usage
-- [ ] ⚙️ Preferences panel
-- [ ] 📊 Process history and analytics
-- [ ] 🔍 Process search and filtering
-- [ ] 📱 Interactive process management
-- [ ] 🎯 CPU/Memory usage alerts
+### Current Version (1.0)
+- ✅ **Core Process Monitoring**: Real-time process discovery and management
+- ✅ **Intelligent Classification**: Smart process categorization system
+- ✅ **MenuBar Integration**: Native macOS menubar interface
+- ✅ **Comprehensive Logging**: Structured logging with performance metrics
+- ✅ **Modular Architecture**: Service-oriented design with dependency injection
+- ✅ **Error Resilience**: Graceful fallbacks and robust error handling
 
-### Enhancements
-- [ ] Dynamic menu showing live processes
-- [ ] Keyboard shortcuts for common actions
-- [ ] Export process data to CSV
-- [ ] Integration with Activity Monitor
-- [ ] Custom refresh intervals
+### Planned Features (1.1)
+- 🔄 **Real-Time Updates**: Live process monitoring with automatic refresh
+- 📊 **Enhanced Metrics**: Memory pressure, disk I/O, and network usage
+- 🎨 **Visual Improvements**: Process graphs and usage indicators
+- ⚙️ **User Preferences**: Customizable refresh intervals and display options
+- 🔍 **Search & Filter**: Quick process search and category filtering
+- � **Usage History**: Track process behavior over time
+
+### Future Enhancements (1.2+)
+- 🔔 **Smart Notifications**: Alerts for high resource usage or suspicious activity
+- 📱 **SwiftUI Interface**: Modern declarative UI with improved user experience
+- 🎯 **Process Insights**: Detailed analysis and recommendations
+- 🛡️ **Security Features**: Process verification and threat detection
+- 📊 **System Overview**: CPU, memory, disk, and network dashboards
+- 🔧 **Advanced Tools**: Process priority management and resource limits
+- 📱 **Shortcuts Integration**: macOS Shortcuts support for automation
+- 🌐 **Remote Monitoring**: Optional network-based monitoring capabilities
+
+### Technical Roadmap
+- **Performance**: Sub-100ms menu rendering for thousands of processes
+- **Platform**: Support for macOS 13+ features and APIs
+- **Testing**: Comprehensive unit and integration test suite
+- **Documentation**: API documentation and developer guides
+- **Accessibility**: Full VoiceOver and accessibility support
+- **Localization**: Multi-language support for international users
+
+### Community Features
+- 🔌 **Plugin System**: Extensible architecture for third-party enhancements
+- 📋 **Export Options**: CSV, JSON export for process data
+- 🎨 **Themes**: Customizable appearance and color schemes
+- 🔧 **Configuration**: Advanced settings and customization options
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make changes and test: `swift build && swift run`
-4. Commit changes: `git commit -am 'Add feature'`
-5. Push to branch: `git push origin feature-name`
-6. Submit a pull request
+We welcome contributions to Reactor! Here's how to get started:
+
+### Development Setup
+
+1. **Fork and Clone**
+   ```bash
+   git clone https://github.com/yourusername/Reactor.git
+   cd Reactor
+   ```
+
+2. **Create Feature Branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+3. **Set Up Development Environment**
+   ```bash
+   # Install dependencies and build
+   swift package resolve
+   swift build --configuration debug
+   
+   # Run tests (when available)
+   swift test
+   ```
+
+### Contribution Guidelines
+
+#### Code Standards
+- **Follow existing architecture**: Use the service-oriented pattern
+- **Add comprehensive logging**: Use `ReactorLogger` with appropriate categories
+- **Include error handling**: Implement graceful fallbacks
+- **Write self-documenting code**: Clear variable names and function signatures
+- **Performance considerations**: Profile changes that affect scanning or UI
+
+#### Example Contribution Workflow
+```bash
+# 1. Make changes and test locally
+swift build && swift run
+
+# 2. Add logging for new features
+ReactorLogger.logAndPrint("🔍 New feature working...", 
+                         type: .info, 
+                         category: ReactorLogger.app,
+                         categoryName: "Feature")
+
+# 3. Test error scenarios
+# 4. Update documentation if needed
+# 5. Commit with descriptive message
+git commit -am "Add network monitoring feature
+
+- Implement NetworkMonitor service
+- Add network usage display in menu
+- Include fallback for network API failures
+- Add comprehensive logging for debugging"
+
+# 6. Push and create pull request
+git push origin feature/your-feature-name
+```
+
+#### Pull Request Guidelines
+- **Clear Description**: Explain what the change does and why
+- **Test Instructions**: Provide steps to test the new functionality
+- **Screenshots**: Include before/after images for UI changes
+- **Breaking Changes**: Document any API or behavior changes
+- **Performance Impact**: Note any performance implications
+
+### Areas for Contribution
+
+#### High-Priority
+- 📊 **Performance Improvements**: Optimize process scanning and menu rendering
+- 🔍 **Process Search**: Add search and filtering capabilities
+- 📱 **SwiftUI Migration**: Modernize UI components
+- 🧪 **Testing Framework**: Add unit and integration tests
+
+#### Medium-Priority
+- 🎨 **Visual Enhancements**: Improve icons and process indicators
+- 📈 **Additional Metrics**: Add network, disk I/O monitoring
+- ⚙️ **User Preferences**: Settings panel and customization
+- 🔔 **Notifications**: Smart alerts for resource usage
+
+#### Documentation
+- 📖 **API Documentation**: Document service interfaces
+- 🎯 **Usage Examples**: Add more code examples
+- 🌐 **Localization**: Multi-language support
+- 📝 **Architecture Guide**: Detailed architectural documentation
+
+### Community Guidelines
+
+- **Be Respectful**: Follow the code of conduct
+- **Ask Questions**: Use GitHub Issues for questions and discussions
+- **Share Ideas**: Propose features in GitHub Discussions
+- **Help Others**: Assist with issues and code review
 
 ## License
 
 MIT License
 
-Copyright (c) 2025 Reactor
+Copyright (c) 2025 Reactor Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -255,13 +688,37 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Support
+---
 
-For issues, feature requests, or questions:
-- Create an issue on GitHub
-- Check the troubleshooting section above
-- Review the VS Code terminal output for error messages
+## Acknowledgments
+
+- **Swift Community**: For excellent tooling and language design
+- **macOS Developers**: For comprehensive system APIs and documentation  
+- **Open Source Contributors**: For inspiration and best practices
+- **Process Monitoring Tools**: Activity Monitor, htop, and similar tools for inspiration
+
+## Support and Contact
+
+### Getting Help
+- 📖 **Documentation**: Check this README and inline code documentation
+- 🐛 **Bug Reports**: Create detailed GitHub Issues with logs and system info
+- 💡 **Feature Requests**: Use GitHub Discussions for feature ideas
+- 🔧 **Development Questions**: Ask in GitHub Issues with "question" label
+
+### Project Links
+- **Homepage**: [GitHub Repository](https://github.com/farfary/Reactor)
+- **Issues**: [Report Bugs](https://github.com/farfary/Reactor/issues)
+- **Discussions**: [Feature Ideas](https://github.com/farfary/Reactor/discussions)
+- **Releases**: [Download Latest](https://github.com/farfary/Reactor/releases)
+
+### System Requirements Reminder
+- **macOS**: 12.0+ (Monterey or later)
+- **Swift**: 5.8+ 
+- **Architecture**: Intel and Apple Silicon supported
+- **Permissions**: Standard user access (sudo optional for system processes)
 
 ---
 
-**Built with ❤️ using Swift and VS Code**
+**Built with ❤️ using Swift, AppKit, and modern macOS development practices**
+
+*Reactor - Empowering developers with real-time system insights*
