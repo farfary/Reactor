@@ -12,6 +12,7 @@ final class ProcessIntrospection {
     private var raCache: [Int: NSRunningApplication?] = [:]
     private var pathCache: [Int: String?] = [:]
     private var launchctlCache: [Int: LaunchctlInfo?] = [:]
+    private let cacheQueue = DispatchQueue(label: "reactor.process.introspection.cache", attributes: .concurrent)
 
     struct LaunchctlInfo {
         let type: String?      // e.g., System, User
@@ -21,16 +22,17 @@ final class ProcessIntrospection {
 
     // MARK: - Running Application
     func runningApplication(for pid: Int) -> NSRunningApplication? {
-        if let cached = raCache[pid] { return cached ?? nil }
-
+        if let cached = cacheQueue.sync(execute: { raCache[pid] }) {
+            return cached
+        }
         let app = NSRunningApplication(processIdentifier: pid_t(pid))
-        raCache[pid] = app
+        cacheQueue.async(flags: .barrier) { self.raCache[pid] = app }
         return app
     }
 
     // MARK: - Executable Path (proc_pidpath with fallback)
     func executablePath(for pid: Int) -> String? {
-        if let cached = pathCache[pid] { return cached ?? nil }
+    if let cached = cacheQueue.sync(execute: { pathCache[pid] }) { return cached }
 
         let bufSize = 4096 // typical maximum for proc_pidpath
         var buffer = Array<CChar>(repeating: 0, count: bufSize)
@@ -40,7 +42,7 @@ final class ProcessIntrospection {
 
         if result > 0 {
             let path = String(cString: buffer)
-            pathCache[pid] = path
+            cacheQueue.async(flags: .barrier) { self.pathCache[pid] = path }
             return path
         }
 
@@ -61,7 +63,7 @@ final class ProcessIntrospection {
                         if line.hasPrefix("n/") {
                             let p = String(line.dropFirst())
                             if !p.isEmpty {
-                                pathCache[pid] = p
+                                self.cacheQueue.async(flags: .barrier) { self.pathCache[pid] = p }
                                 return p
                             }
                         }
@@ -72,13 +74,13 @@ final class ProcessIntrospection {
             // ignore; will return nil
         }
 
-        pathCache[pid] = nil
+        cacheQueue.async(flags: .barrier) { self.pathCache[pid] = nil }
         return nil
     }
 
     // MARK: - Launchctl Info (best-effort, parsed minimally)
     func launchctlInfo(for pid: Int, timeout: TimeInterval = 1.0) -> LaunchctlInfo? {
-        if let cached = launchctlCache[pid] { return cached ?? nil }
+    if let cached = cacheQueue.sync(execute: { launchctlCache[pid] }) { return cached }
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -97,20 +99,20 @@ final class ProcessIntrospection {
         }
 
         do { try task.run() } catch {
-            launchctlCache[pid] = nil
+            cacheQueue.async(flags: .barrier) { self.launchctlCache[pid] = nil }
             return nil
         }
 
         let waitResult = group.wait(timeout: .now() + timeout)
         if waitResult == .timedOut {
             task.terminate()
-            launchctlCache[pid] = nil
+            cacheQueue.async(flags: .barrier) { self.launchctlCache[pid] = nil }
             return nil
         }
         task.waitUntilExit()
 
         guard task.terminationStatus == 0, let text = String(data: outputData, encoding: .utf8) else {
-            launchctlCache[pid] = nil
+            cacheQueue.async(flags: .barrier) { self.launchctlCache[pid] = nil }
             return nil
         }
 
@@ -131,7 +133,7 @@ final class ProcessIntrospection {
         }
 
         let info = LaunchctlInfo(type: type, path: path, userID: userID)
-        launchctlCache[pid] = info
+        cacheQueue.async(flags: .barrier) { self.launchctlCache[pid] = info }
         return info
     }
 }

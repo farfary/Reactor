@@ -37,6 +37,22 @@ struct ProcessInfo {
         self.user = nil
     }
     
+    /// Rebuild a ProcessInfo using cached metadata but new CPU/Memory metrics
+    init(meta: ProcessInfo, cpuUsage: Double, memoryUsage: Double) {
+        self.pid = meta.pid
+        self.cpuUsage = cpuUsage
+        self.memoryUsage = memoryUsage
+        self.command = meta.command
+        self.fullPath = meta.fullPath
+        self.processType = meta.processType
+        self.category = meta.category
+        self.isApplication = meta.isApplication
+        self.bundleIdentifier = meta.bundleIdentifier
+        self.startTime = meta.startTime
+        self.parentPID = meta.parentPID
+        self.user = meta.user
+    }
+
     /// Enhanced initializer with full metadata
     init(pid: Int, cpuUsage: Double, memoryUsage: Double, command: String, fullPath: String, 
          startTime: Date?, parentPID: Int?, user: String?) {

@@ -11,11 +11,15 @@ class ProcessManager {
     private let scanningService = ProcessScanningService()
     private let iconService = ProcessIconService()
     private let classifier = ProcessClassifier()
+    private let workQueue = DispatchQueue(label: "reactor.process.refresh", qos: .userInitiated)
     
     // MARK: - Cache
     private var cachedProcesses: [ProcessInfo] = []
+    // Static per-PID metadata cache (command, fullPath, type, bundle, etc.)
+    private var pidMetaCache: [Int: ProcessInfo] = [:]
     private var lastUpdateTime: Date = Date.distantPast
     private let cacheTimeout: TimeInterval = 5.0 // 5 seconds
+    private(set) var isScanning: Bool = false
     
     // MARK: - Public Interface
     
@@ -30,13 +34,65 @@ class ProcessManager {
         ReactorLogger.logAndPrint("🔄 Refreshing process list...", 
                                  type: .info, category: ReactorLogger.process, categoryName: "Process")
         
-        let processes = scanningService.getAllProcesses()
+        let processes: [ProcessInfo]
+        if pidMetaCache.isEmpty {
+            // First load: full scan populating metadata
+            let scanned = scanningService.getAllProcesses()
+            updateMetaCache(with: scanned)
+            processes = scanned
+        } else {
+            // Subsequent refreshes: update only CPU/MEM using a light ps snapshot
+            let ps = scanningService.getCpuMemSnapshot()
+            var updated: [ProcessInfo] = []
+            // Keep only processes that still exist in ps; add any new pids via minimal construction
+            for (pid, row) in ps {
+                if let meta = pidMetaCache[pid] {
+                    updated.append(ProcessInfo(meta: meta, cpuUsage: row.cpu, memoryUsage: row.mem))
+                } else {
+                    // New PID: do a one-off enrichment using scanningService minimal enrich
+                    if let enriched = scanningService.enrichNewPid(pid: pid, cpu: row.cpu, mem: row.mem, commandFallback: row.comm) {
+                        updated.append(enriched)
+                        pidMetaCache[pid] = enriched
+                    }
+                }
+            }
+            processes = updated
+        }
         updateCache(with: processes)
         
         // Preload icons in background
         iconService.preloadIcons(for: Array(processes.prefix(20))) // Top 20 processes
         
         return processes
+    }
+
+    /// Returns cached processes immediately without triggering scans
+    func getCachedProcessesOnly() -> [ProcessInfo] {
+        return cachedProcesses
+    }
+
+    /// Returns whether the current cache is considered fresh
+    func isCacheFresh() -> Bool {
+        return shouldUseCache()
+    }
+
+    /// Asynchronously refreshes processes on a background queue; completion is called on main
+    func refreshProcessesAsync(forceRefresh: Bool = false, completion: (([ProcessInfo]) -> Void)? = nil) {
+        if isScanning {
+            ReactorLogger.logAndPrint("🔄 Refresh already in progress; skipping new request", type: .default, category: ReactorLogger.process, categoryName: "Process")
+            return
+        }
+        isScanning = true
+        ReactorLogger.logAndPrint("🔍 Starting async process refresh (force=\(forceRefresh))", type: .info, category: ReactorLogger.process, categoryName: "Process")
+        workQueue.async { [weak self] in
+            guard let self = self else { return }
+            let procs = self.getAllProcesses(forceRefresh: forceRefresh)
+            DispatchQueue.main.async {
+                self.isScanning = false
+                ReactorLogger.logAndPrint("✅ Async process refresh completed (\(procs.count) processes)", type: .info, category: ReactorLogger.process, categoryName: "Process")
+                completion?(procs)
+            }
+        }
     }
     
     /// Gets processes organized by category
@@ -180,6 +236,10 @@ class ProcessManager {
     private func updateCache(with processes: [ProcessInfo]) {
         cachedProcesses = processes
         lastUpdateTime = Date()
+    }
+
+    private func updateMetaCache(with processes: [ProcessInfo]) {
+        for p in processes { pidMetaCache[p.pid] = p }
     }
 }
 

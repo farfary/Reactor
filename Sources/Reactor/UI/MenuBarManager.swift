@@ -68,11 +68,19 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         
-        // Add system info header
-        addSystemInfoHeader(to: menu)
-        
-        // Add process sections by category
-        addProcessSections(to: menu)
+        // Use cached processes immediately to avoid blocking UI
+        let cached = processManager.getCachedProcessesOnly()
+        addSystemInfoHeader(to: menu, cachedCount: cached.count)
+        addProcessSections(to: menu, with: cached)
+
+        // If no cache or a refresh is needed, show loading indicator and kick off async refresh
+        if cached.isEmpty || !processManager.isCacheFresh() {
+            let loading = NSMenuItem()
+            loading.title = "⏳ Loading processes…"
+            loading.isEnabled = false
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(loading)
+        }
         
         // Add control section
         addControlSection(to: menu)
@@ -84,9 +92,16 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         
         ReactorLogger.logAndPrint("✅ Menu constructed and assigned to status item", 
                                  type: .info, category: ReactorLogger.ui, categoryName: "UI")
+
+        // Trigger a background refresh to update menu when completed
+        processManager.refreshProcessesAsync(forceRefresh: cached.isEmpty) { [weak self] _ in
+            guard let self = self else { return }
+            // Rebuild menu on main thread with fresh data
+            self.rebuildMenuWithFreshData()
+        }
     }
     
-    private func addSystemInfoHeader(to menu: NSMenu) {
+    private func addSystemInfoHeader(to menu: NSMenu, cachedCount: Int) {
         let systemInfo = processManager.getSystemInfo()
         
         // System header
@@ -101,8 +116,8 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         memoryItem.isEnabled = false
         menu.addItem(memoryItem)
         
-        // Process count
-        let processCount = processManager.getAllProcesses().count
+        // Process count (use cached value to avoid sync scan)
+        let processCount = cachedCount
         let processCountItem = NSMenuItem()
         processCountItem.title = "📊 Total Processes: \(processCount)"
         processCountItem.isEnabled = false
@@ -111,8 +126,11 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
     }
     
-    private func addProcessSections(to menu: NSMenu) {
-        let categorizedProcesses = processManager.getProcessesByCategory()
+    private func addProcessSections(to menu: NSMenu, with processes: [ProcessInfo]) {
+        // Build categories locally from provided list to avoid synchronous calls
+        var categorizedProcesses: [ProcessCategory: [ProcessInfo]] = [:]
+        for category in ProcessCategory.allCases { categorizedProcesses[category] = [] }
+        for p in processes { categorizedProcesses[p.category, default: []].append(p) }
         
         for category in ProcessCategory.allCases.sorted(by: { $0.displayPriority < $1.displayPriority }) {
             guard let processes = categorizedProcesses[category], !processes.isEmpty else { continue }
@@ -275,6 +293,7 @@ class MenuBarManager: NSObject, NSMenuDelegate {
     @objc private func refreshProcesses() {
         ReactorLogger.logAndPrint("🔄 User requested process refresh", 
                                  type: .info, category: ReactorLogger.ui, categoryName: "UI")
+        // Rebuild immediately from cache and trigger background refresh
         constructMenu()
     }
     
@@ -316,5 +335,22 @@ class MenuBarManager: NSObject, NSMenuDelegate {
     func menuDidClose(_ menu: NSMenu) {
         ReactorLogger.logAndPrint("📁 Menu closed", 
                                  type: .debug, category: ReactorLogger.ui, categoryName: "UI")
+    }
+}
+
+// MARK: - Private helpers (menu rebuilding)
+extension MenuBarManager {
+    private func rebuildMenuWithFreshData() {
+        guard let statusItem = statusItem else { return }
+        let menu = NSMenu()
+        menu.delegate = self
+
+        let fresh = processManager.getCachedProcessesOnly()
+        addSystemInfoHeader(to: menu, cachedCount: fresh.count)
+        addProcessSections(to: menu, with: fresh)
+        addControlSection(to: menu)
+        addInfoSection(to: menu)
+        statusItem.menu = menu
+        ReactorLogger.logAndPrint("✅ Menu rebuilt with fresh data (\(fresh.count) processes)", type: .info, category: ReactorLogger.ui, categoryName: "UI")
     }
 }

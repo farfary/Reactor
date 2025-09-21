@@ -113,11 +113,34 @@ class ProcessScanningService {
         return map
     }
 
+    // MARK: - Public lightweight snapshot (CPU/MEM only)
+    func getCpuMemSnapshot() -> [Int: (cpu: Double, mem: Double, comm: String)] {
+        let map = getPsSnapshot()
+        var out: [Int: (cpu: Double, mem: Double, comm: String)] = [:]
+        for (pid, row) in map { out[pid] = (row.cpu, row.mem, row.comm) }
+        return out
+    }
+
+    // Enrich a newly discovered PID with static metadata once
+    func enrichNewPid(pid: Int, cpu: Double, mem: Double, commandFallback: String) -> ProcessInfo? {
+        let path = ProcessIntrospection.shared.executablePath(for: pid)
+        let name: String
+        if let app = ProcessIntrospection.shared.runningApplication(for: pid) {
+            name = app.localizedName ?? app.bundleIdentifier ?? commandFallback
+        } else {
+            name = commandFallback
+        }
+        // If the pid disappeared, skip
+        return ProcessInfo(pid: pid, cpuUsage: cpu, memoryUsage: mem, command: name, fullPath: path ?? name)
+    }
+
     private func buildProcessesFromNSWorkspace(psMap: [Int: PsRow]) -> [ProcessInfo] {
-        var results: [ProcessInfo] = []
         let runningApps = NSWorkspace.shared.runningApplications
         ReactorLogger.logAndPrint("🔍 NSWorkspace running apps: \(runningApps.count)", type: .debug, category: ReactorLogger.process, categoryName: "Process")
-        for app in runningApps {
+        var results: [ProcessInfo] = []
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: runningApps.count) { idx in
+            let app = runningApps[idx]
             let pid = Int(app.processIdentifier)
             let ps = psMap[pid]
             let cpu = ps?.cpu ?? 0.0
@@ -125,17 +148,22 @@ class ProcessScanningService {
             let name = app.localizedName ?? app.bundleIdentifier ?? (ps?.comm ?? "Unknown")
             let fullPath = ProcessIntrospection.shared.executablePath(for: pid) ?? app.executableURL?.path ?? app.bundleURL?.path ?? name
             let p = ProcessInfo(pid: pid, cpuUsage: cpu, memoryUsage: mem, command: name, fullPath: fullPath)
-            results.append(p)
+            lock.lock(); results.append(p); lock.unlock()
         }
         return results
     }
 
     private func buildProcessesFromPs(psMap: [Int: PsRow], excludePids: Set<Int>) -> [ProcessInfo] {
+        let pairs = psMap.filter { !excludePids.contains($0.key) }
         var results: [ProcessInfo] = []
-        for (pid, row) in psMap where !excludePids.contains(pid) {
+        results.reserveCapacity(pairs.count)
+        let entries = Array(pairs)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: entries.count) { idx in
+            let (pid, row) = entries[idx]
             let fullPath = ProcessIntrospection.shared.executablePath(for: pid) ?? row.comm
             let p = ProcessInfo(pid: pid, cpuUsage: row.cpu, memoryUsage: row.mem, command: row.comm, fullPath: fullPath)
-            results.append(p)
+            lock.lock(); results.append(p); lock.unlock()
         }
         return results
     }
