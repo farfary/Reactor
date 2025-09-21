@@ -6,6 +6,7 @@ class DashboardViewController: NSViewController, NSTableViewDataSource, NSTableV
     private var processes: [ProcessInfo] = []
     private var tableView: NSTableView!
     private var timer: DispatchSourceTimer?
+    private let defaults = UserDefaults.standard
 
     private let headerLabel = NSTextField(labelWithString: "")
 
@@ -19,34 +20,48 @@ class DashboardViewController: NSViewController, NSTableViewDataSource, NSTableV
         super.viewDidLoad()
         refresh()
         startTimer()
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: .reactorSettingsChanged, object: nil)
     }
 
     deinit {
         timer?.cancel()
         timer = nil
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func buildUI() {
         headerLabel.font = .systemFont(ofSize: 12, weight: .regular)
         headerLabel.textColor = .secondaryLabelColor
 
-        let scrollView = NSScrollView()
+    let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
+    scrollView.hasHorizontalScroller = false
 
         tableView = NSTableView()
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.delegate = self
         tableView.dataSource = self
         tableView.rowHeight = 24
+        tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
 
-        let cols: [(String, CGFloat)] = [("Process", 260), ("PID", 70), ("CPU", 70), ("Memory", 100), ("Type", 140)]
-        for (title, width) in cols {
+        let cols: [(String, CGFloat, CGFloat)] = [
+            ("Process", 300, 250),
+            ("PID", 80, 70),
+            ("CPU", 90, 80),
+            ("Memory", 120, 110),
+            ("Type", 160, 140)
+        ]
+        for (title, width, minWidth) in cols {
             let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(title))
             col.title = title
             col.width = width
+            col.minWidth = minWidth
+            col.resizingMask = [.autoresizingMask]
             tableView.addTableColumn(col)
         }
+
+        tableView.sizeLastColumnToFit()
 
         scrollView.documentView = tableView
 
@@ -67,23 +82,43 @@ class DashboardViewController: NSViewController, NSTableViewDataSource, NSTableV
     private func startTimer() {
         timer?.cancel()
         let t = DispatchSource.makeTimerSource(queue: .main)
-        t.schedule(deadline: .now() + 1, repeating: 1)
+        let interval = max(1, defaults.integer(forKey: "refreshInterval"))
+        t.schedule(deadline: .now() + .seconds(interval), repeating: .seconds(interval))
         t.setEventHandler { [weak self] in self?.refresh() }
         timer = t
         t.resume()
     }
 
+    @objc private func settingsChanged() {
+        // Restart timer with new interval and refresh immediately
+        startTimer()
+        refresh()
+    }
+
     private func refresh() {
         let sys = processManager.getSystemInfo()
-        headerLabel.stringValue = "Memory: \(sys.formattedUsedMemory)/\(sys.formattedTotalMemory) (\(sys.formattedMemoryUsage)) — Processes: \(processManager.getCachedProcessesOnly().count)"
+        headerLabel.stringValue = "Memory: \(sys.formattedUsedMemory)/\(sys.formattedTotalMemory) (\(sys.formattedMemoryUsage))"
         processManager.refreshProcessesAsync(forceRefresh: false) { [weak self] procs in
             guard let self = self else { return }
-            self.processes = procs.sorted { lhs, rhs in
+            var list = procs
+            // Optional filter: hide system processes if user disabled visibility
+            if self.defaults.bool(forKey: "showSystemProcesses") == false {
+                list = list.filter { $0.processType == .userApplication || $0.processType == .userDaemon || $0.processType == .backgroundTask }
+            }
+
+            self.processes = list.sorted { lhs, rhs in
                 if lhs.cpuUsage == rhs.cpuUsage { return lhs.memoryUsage > rhs.memoryUsage }
                 return lhs.cpuUsage > rhs.cpuUsage
             }
             self.tableView.reloadData()
+            self.updateHeaderCount()
         }
+    }
+
+    private func updateHeaderCount() {
+        let sys = processManager.getSystemInfo()
+        // Extend the header with the current table count to reflect filters
+        headerLabel.stringValue = "Memory: \(sys.formattedUsedMemory)/\(sys.formattedTotalMemory) (\(sys.formattedMemoryUsage)) — Showing: \(processes.count) processes"
     }
 
     // MARK: - Table
@@ -94,9 +129,9 @@ class DashboardViewController: NSViewController, NSTableViewDataSource, NSTableV
         let p = processes[row]
         let id = tableColumn.identifier
 
-        let cell = NSTableCellView()
-        cell.textField = NSTextField(labelWithString: "")
-        cell.textField?.lineBreakMode = .byTruncatingTail
+    let cell = NSTableCellView()
+    let label = NSTextField(labelWithString: "")
+    label.lineBreakMode = .byTruncatingTail
         if id.rawValue == "Process" {
             let h = NSStackView()
             h.orientation = .horizontal
@@ -106,9 +141,9 @@ class DashboardViewController: NSViewController, NSTableViewDataSource, NSTableV
             imgView.symbolConfiguration = .init(pointSize: 14, weight: .regular)
             imgView.image = processManager.getIcon(for: p) ?? NSImage(systemSymbolName: p.processType.systemIconName, accessibilityDescription: nil)
             imgView.frame.size = NSSize(width: 16, height: 16)
-            cell.textField?.stringValue = p.displayName
+            label.stringValue = p.displayName
             h.addArrangedSubview(imgView)
-            h.addArrangedSubview(cell.textField!)
+            h.addArrangedSubview(label)
             cell.addSubview(h)
             h.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
@@ -121,22 +156,20 @@ class DashboardViewController: NSViewController, NSTableViewDataSource, NSTableV
         }
 
         switch id.rawValue {
-        case "PID": cell.textField?.stringValue = String(p.pid)
-        case "CPU": cell.textField?.stringValue = p.formattedCPUUsage
-        case "Memory": cell.textField?.stringValue = p.formattedMemoryUsage
-        case "Type": cell.textField?.stringValue = p.processType.rawValue
+        case "PID": label.stringValue = String(p.pid)
+        case "CPU": label.stringValue = p.formattedCPUUsage
+        case "Memory": label.stringValue = p.formattedMemoryUsage
+        case "Type": label.stringValue = p.processType.rawValue
         default: break
         }
 
-        if let tf = cell.textField {
-            cell.addSubview(tf)
-            tf.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                tf.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
-                tf.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -4),
-                tf.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
-            ])
-        }
+        cell.addSubview(label)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -4),
+            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+        ])
         return cell
     }
 }

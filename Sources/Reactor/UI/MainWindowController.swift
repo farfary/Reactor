@@ -12,6 +12,7 @@ class MainWindowController: NSWindowController {
                               defer: false)
         window.title = "Reactor — Task Manager"
         window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(width: 900, height: 500)
 
         self.init(window: window)
         setupContent()

@@ -21,7 +21,8 @@ let package = Package(
         .executableTarget(
             name: "Reactor",
             dependencies: [],
-            path: "Sources/Reactor"
+            path: "Sources/Reactor",
+            exclude: ["Models/Notifications.swift"]
         ),
     ]
 )

@@ -48,5 +48,6 @@ class SettingsViewController: NSViewController {
         defaults.set(max(1, refresh), forKey: "refreshInterval")
         defaults.set(showSystemCheckbox.state == .on, forKey: "showSystemProcesses")
         ReactorLogger.logAndPrint("✅ Preferences saved (refresh=\(max(1, refresh)), showSystem=\(showSystemCheckbox.state == .on))", type: .info, category: ReactorLogger.app, categoryName: "Settings")
+        NotificationCenter.default.post(name: .reactorSettingsChanged, object: nil)
     }
 }
