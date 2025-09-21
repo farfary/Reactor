@@ -7,6 +7,11 @@ class MenuBarManager: NSObject, NSMenuDelegate {
     // MARK: - Properties
     private var statusItem: NSStatusItem?
     private let processManager = ProcessManager()
+    private var pidItemMap: [Int: NSMenuItem] = [:]
+    private var memoryItemRef: NSMenuItem?
+    private var processCountItemRef: NSMenuItem?
+    private var liveUpdateTimer: DispatchSourceTimer?
+    private var menuOpen: Bool = false
     
     // MARK: - Setup
     
@@ -67,6 +72,9 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         
         let menu = NSMenu()
         menu.delegate = self
+        pidItemMap.removeAll()
+        memoryItemRef = nil
+        processCountItemRef = nil
         
         // Use cached processes immediately to avoid blocking UI
         let cached = processManager.getCachedProcessesOnly()
@@ -94,10 +102,15 @@ class MenuBarManager: NSObject, NSMenuDelegate {
                                  type: .info, category: ReactorLogger.ui, categoryName: "UI")
 
         // Trigger a background refresh to update menu when completed
-        processManager.refreshProcessesAsync(forceRefresh: cached.isEmpty) { [weak self] _ in
+        processManager.refreshProcessesAsync(forceRefresh: cached.isEmpty) { [weak self] fresh in
             guard let self = self else { return }
-            // Rebuild menu on main thread with fresh data
-            self.rebuildMenuWithFreshData()
+            if self.menuOpen {
+                // Update in-place to keep menu open and live
+                self.updateMenuItems(with: fresh)
+            } else {
+                // Rebuild menu on main thread with fresh data
+                self.rebuildMenuWithFreshData()
+            }
         }
     }
     
@@ -114,6 +127,7 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         let memoryItem = NSMenuItem()
         memoryItem.title = "💾 Memory: \(systemInfo.formattedUsedMemory) / \(systemInfo.formattedTotalMemory) (\(systemInfo.formattedMemoryUsage))"
         memoryItem.isEnabled = false
+        memoryItemRef = memoryItem
         menu.addItem(memoryItem)
         
         // Process count (use cached value to avoid sync scan)
@@ -121,6 +135,7 @@ class MenuBarManager: NSObject, NSMenuDelegate {
         let processCountItem = NSMenuItem()
         processCountItem.title = "📊 Total Processes: \(processCount)"
         processCountItem.isEnabled = false
+        processCountItemRef = processCountItem
         menu.addItem(processCountItem)
         
         menu.addItem(NSMenuItem.separator())
@@ -145,6 +160,7 @@ class MenuBarManager: NSObject, NSMenuDelegate {
             let limitedProcesses = Array(processes.prefix(5))
             for process in limitedProcesses {
                 let processItem = createProcessMenuItem(for: process)
+                pidItemMap[process.pid] = processItem
                 menu.addItem(processItem)
             }
             
@@ -330,11 +346,15 @@ class MenuBarManager: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         ReactorLogger.logAndPrint("📂 Menu opening", 
                                  type: .debug, category: ReactorLogger.ui, categoryName: "UI")
+        menuOpen = true
+        startLiveUpdates()
     }
     
     func menuDidClose(_ menu: NSMenu) {
         ReactorLogger.logAndPrint("📁 Menu closed", 
                                  type: .debug, category: ReactorLogger.ui, categoryName: "UI")
+        menuOpen = false
+        stopLiveUpdates()
     }
 }
 
@@ -352,5 +372,49 @@ extension MenuBarManager {
         addInfoSection(to: menu)
         statusItem.menu = menu
         ReactorLogger.logAndPrint("✅ Menu rebuilt with fresh data (\(fresh.count) processes)", type: .info, category: ReactorLogger.ui, categoryName: "UI")
+    }
+
+    private func startLiveUpdates() {
+        stopLiveUpdates() // ensure only one
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.menuOpen else { return }
+            self.processManager.refreshProcessesAsync(forceRefresh: false) { [weak self] fresh in
+                guard let self = self, self.menuOpen else { return }
+                self.updateMenuItems(with: fresh)
+            }
+        }
+        liveUpdateTimer = timer
+        timer.resume()
+        ReactorLogger.logAndPrint("📡 Live updates started", type: .debug, category: ReactorLogger.ui, categoryName: "UI")
+    }
+
+    private func stopLiveUpdates() {
+        liveUpdateTimer?.cancel()
+        liveUpdateTimer = nil
+        ReactorLogger.logAndPrint("🛑 Live updates stopped", type: .debug, category: ReactorLogger.ui, categoryName: "UI")
+    }
+
+    private func updateMenuItems(with processes: [ProcessInfo]) {
+        // Update header
+        let systemInfo = processManager.getSystemInfo()
+        memoryItemRef?.title = "💾 Memory: \(systemInfo.formattedUsedMemory) / \(systemInfo.formattedTotalMemory) (\(systemInfo.formattedMemoryUsage))"
+        processCountItemRef?.title = "📊 Total Processes: \(processes.count)"
+
+        // If we don't have any per-process items yet (e.g., initial open showed only
+        // the loading placeholder), rebuild the menu with the fresh dataset so the
+        // categories and process rows appear.
+        if pidItemMap.isEmpty && !processes.isEmpty {
+            rebuildMenuWithFreshData()
+            return
+        }
+
+        // Update visible processes (those we created items for)
+        for p in processes {
+            if let item = pidItemMap[p.pid] {
+                item.attributedTitle = createAttributedTitle(for: p)
+            }
+        }
     }
 }
