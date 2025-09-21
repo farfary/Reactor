@@ -214,8 +214,8 @@ class ProcessScanningService {
             return nil
         }
         
-        let command = components[3]
-        let fullPath = getFullPath(for: pid, command: command)
+    let command = components[3]
+    let fullPath = ProcessIntrospection.shared.executablePath(for: pid) ?? getFullPath(for: pid, command: command)
         
         return ProcessInfo(pid: pid, cpuUsage: cpu, memoryUsage: memory, command: command, fullPath: fullPath)
     }
